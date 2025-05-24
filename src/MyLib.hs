@@ -10,10 +10,23 @@ import Numeric (readFloat, readSigned)
 import Text.Parsec
 import Text.Parsec.String (Parser)
 
+-- Internal types
 data Transaction = Transaction
+  { txDate :: Day
+  , txTitle :: Text
+  , txDescription :: Text
+  , txCategory :: Text
+  , txAmount :: Double
+  }
+  deriving (Show)
+
+-- File types
+
+data TransactionBlock = TransactionBlock
   { txHeader :: TransactionHeaderData
   , txInfo :: TransactionInfo
-  } deriving (Show)
+  }
+  deriving (Show)
 
 data TransactionHeaderData = TransactionHeaderData
   { hDate :: Day
@@ -36,11 +49,13 @@ YYYY-MM-DD Title
     Amount: 12.34
 --}
 
-testParseData = "2025-05-23 Trader Joe's\n\
-\   Category: CoolMeal\n\
-\   Amount: 12.34\n\
-\   ; Optional description\n\
-\ \n"
+testParseData :: String
+testParseData =
+  "2025-05-23 Trader Joe's\n\
+  \   Category: CoolMeal\n\
+  \   Amount: 12.34\n\
+  \   ; Optional description\n\
+  \ \n"
 
 testTransactionParser :: Either ParseError Transaction
 testTransactionParser = parse parseTransaction "test data" testParseData
@@ -50,14 +65,25 @@ testTransactionParser = parse parseTransaction "test data" testParseData
 -----------------------
 
 parseTransaction :: Parser Transaction
-parseTransaction = Transaction <$> parseTransactionHeader <*> parseTransactionInfo
+parseTransaction = do
+  headerBlock <- parseTransactionHeader
+  infoBlock <- parseTransactionInfo
+
+  return
+    ( Transaction
+        { txDate = hDate headerBlock
+        , txTitle = hTitle headerBlock
+        , txCategory = infoCategory infoBlock
+        , txDescription = infoNote infoBlock
+        , txAmount = infoAmount infoBlock
+        }
+    )
 
 parseTransactionInfo :: Parser TransactionInfo
 parseTransactionInfo = TransactionInfo <$> parseCategory <*> parseAmountLine <*> parseNoteContent
 
 parseTransactionHeader :: Parser TransactionHeaderData
 parseTransactionHeader = TransactionHeaderData <$> parseDate <*> (space *> parseTitle)
-
 
 parseNoteContent :: Parser Text
 parseNoteContent =
