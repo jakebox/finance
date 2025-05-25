@@ -1,24 +1,29 @@
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
-module MyLib (someFunc) where
+module MyLib (parseAndPrint) where
 
 import Data.List
+import Data.Map.Strict (Map, insertWith)
 import Data.Text (Text, pack)
-import Data.Time (Day)
+import Data.Time (Day, toGregorian)
 import Data.Time.Format (defaultTimeLocale, parseTimeM)
 import Numeric (readFloat, readSigned)
 import Text.Parsec
 import Text.Parsec.String (Parser)
+import qualified Data.Map.Strict as M
 
 -- Internal types
 data Transaction = Transaction
   { txDate :: Day
   , txTitle :: Text
   , txDescription :: Text
-  , txCategory :: Text
+  , txCategory :: Category
   , txAmount :: Double
   }
   deriving (Show)
+
+newtype Category = CategoryName Text
+  deriving (Eq, Ord, Show)
 
 -- File types
 
@@ -35,7 +40,7 @@ data TransactionHeaderData = TransactionHeaderData
   deriving (Show)
 
 data TransactionInfo = TransactionInfo
-  { infoCategory :: Text
+  { infoCategory :: Category
   , infoAmount :: Double
   , infoNote :: Text
   }
@@ -61,8 +66,45 @@ testTransactionParser :: Either ParseError Transaction
 testTransactionParser = parse parseTransaction "test data" testParseData
 
 -----------------------
+-- IO
+-----------------------
+parseTransactionsFromFile :: FilePath -> IO (Either ParseError [Transaction])
+parseTransactionsFromFile fp = readFile fp >>= \c -> return (parse parseManyTransactions "" c)
+
+-- return wraps the return value in the IO monad
+-- could also be written as this:
+-- parseTransactionsFromFile fp = do
+--     content <- readFile fp
+--     let parseResult = parse parseManyTransactions "" content
+--     return parseResult
+
+-----------------------
+-- Reporting
+-----------------------
+spendingByCategory :: Category -> [Transaction] -> Map Category Double
+spendingByCategory cat = foldl (comb cat) M.empty
+
+comb :: Category -> Map Category Double -> Transaction -> Map Category Double
+comb c m trans = insertWith (+) c amt m where
+    amt = txAmount trans
+
+-----------------------
+-- Filtering
+-----------------------
+filterByMonth :: Integer -> Integer -> [Transaction] -> [Transaction]
+filterByMonth year month = filter (isInMonth year month)
+
+isInMonth :: Integer -> Integer -> Transaction -> Bool
+isInMonth tYear tMonth transaction = (tYear == y) && (tMonth == fromIntegral m)
+  where
+    (y, m, _) = toGregorian (txDate transaction)
+
+-----------------------
 -- Parsers
 -----------------------
+
+parseManyTransactions :: Parser [Transaction]
+parseManyTransactions = many (parseTransaction <* optional newline)
 
 parseTransaction :: Parser Transaction
 parseTransaction = do
@@ -94,9 +136,9 @@ parseNoteContent =
             *> manyTill anyChar endOfLine
         )
 
-parseCategory :: Parser Text
+parseCategory :: Parser Category
 parseCategory =
-  pack
+  CategoryName . pack
     <$> ( skipMany1 space
             *> string "Category:"
             *> space
@@ -115,9 +157,9 @@ parseAmountLine = do
     _ -> fail "Invalid amount format"
 
 parseAmountValue :: Parser String
-parseAmountValue = comb <$> many1 digit <*> char '.' <*> count 2 digit
+parseAmountValue = combine <$> many1 digit <*> char '.' <*> count 2 digit
   where
-    comb d _ c = d ++ "." ++ c
+    combine d _ c = d ++ "." ++ c
 
 parseTitle :: Parser Text
 parseTitle = pack <$> manyTill anyChar endOfLine
@@ -147,5 +189,17 @@ parseMonthOrDayPart = count 2 digit
 parseDateString :: String -> String -> String -> String
 parseDateString y m d = intercalate "-" [y, m, d]
 
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+parseAndPrint :: IO ()
+parseAndPrint = do
+  let filePath = "transactions.fin"
+  result <- parseTransactionsFromFile filePath
+
+  case result of
+    Left err -> do
+      putStrLn $ "Error processing file, this is the error: \n" ++ show err
+    Right transactions -> do
+      putStrLn "Successfully read file"
+      let filteredTransactions = filterByMonth 2025 5 transactions
+      let spendCats = spendingByCategory (CategoryName (pack "CoolMeal")) transactions 
+      print filteredTransactions
+      print spendCats
