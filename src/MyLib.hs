@@ -11,14 +11,14 @@ module MyLib
 import Data.List
 import Data.Map.Strict (Map, insertWith)
 import qualified Data.Map.Strict as M
-import Data.Text (Text, pack)
+import Data.Text (Text, null, pack)
 import qualified Data.Text.IO as T
+import qualified Data.Text.IO as TIO
 import Data.Time (Day, toGregorian)
 import Data.Time.Format (defaultTimeLocale, formatTime, parseTimeM)
 import Numeric (readFloat, readSigned, showFFloat)
 import Text.Parsec
 import Text.Parsec.String (Parser)
-import Data.Type.Coercion (trans)
 
 -- Internal types
 data Transaction = Transaction
@@ -94,19 +94,28 @@ parseTransactionsFromFile fp = readFile fp >>= \c -> return (parse parseManyTran
 -----------------------
 formatTransaction :: Transaction -> Text
 formatTransaction t =
+  (formatTransactionDate (txDate t) <> pack " " <> txTitle t)
+    <> keyValueNewline (pack "Category") (categoryToText (txCategory t))
+    <> keyValueNewline (pack "Amount") (formatTransactionAmount (txAmount t))
+    <> (indentationOutputNewline <> pack "; " <> txDescription t)
+    <> pack "\n"
+  where
+    keyValueNewline key value =
+      indentationOutputNewline <> key <> pack ": " <> value
+
+formatTransactionForCLI :: Transaction -> Text
+formatTransactionForCLI t =
   formatTransactionDate (txDate t)
     <> pack " "
     <> txTitle t
-    <> indentationOutputNewline
-    <> pack "Category: "
-    <> categoryToText (txCategory t)
-    <> indentationOutputNewline
-    <> pack "Amount: "
+    <> pack " - $"
     <> formatTransactionAmount (txAmount t)
-    <> indentationOutputNewline
-    <> pack "; "
-    <> txDescription t
-    <> pack "\n"
+    <> pack "\n   Category: "
+    <> categoryToText (txCategory t)
+    <> ( if Data.Text.null (txDescription t)
+          then pack ""
+          else pack " (" <> txDescription t <> pack ")"
+       )
 
 formatTransactionDate :: Day -> Text
 formatTransactionDate d = pack (formatTime defaultTimeLocale "%Y-%m-%d" d)
@@ -114,11 +123,8 @@ formatTransactionDate d = pack (formatTime defaultTimeLocale "%Y-%m-%d" d)
 formatTransactionAmount :: Double -> Text
 formatTransactionAmount a = pack (showFFloat (Just 2) a "")
 
-indentationOutput :: Text
-indentationOutput = pack (replicate 4 ' ')
-
 indentationOutputNewline :: Text
-indentationOutputNewline = pack "\n" <> indentationOutput
+indentationOutputNewline = pack "\n" <> pack (replicate 4 ' ')
 
 -----------------------
 -- Reporting
@@ -288,11 +294,13 @@ applyDateBlockFilter block transactions = case block of
   Just "month" -> filterByMonth 2024 4 transactions
   _ -> transactions
 
-
 applyCategoryFilter :: Maybe String -> [Transaction] -> [Transaction]
 applyCategoryFilter category transactions = case category of
   Just c -> filterByCategory (CategoryName (pack c)) transactions
   _ -> transactions
+
+printTransactions :: [Transaction] -> IO ()
+printTransactions = mapM_ (TIO.putStrLn . formatTransactionForCLI)
 
 parseReport :: ReportCommandOptions -> IO ()
 parseReport opts = do
@@ -303,28 +311,10 @@ parseReport opts = do
     Left err -> do
       putStrLn $ "Error processing file: \n" ++ show err
     Right transactions -> do
-      -- let spendCats = spendingByCategory transactions
-      -- let formattedTransactions = map formatTransaction filteredTransactions
-      -- mapM_ print formattedTransactions
-      -- print spendCats
-      print (reportDateBlock opts)
       let x = applyDateBlockFilter (reportDateBlock opts) transactions
       let y = applyCategoryFilter (reportCategory opts) x
 
-      let formattedTransactions = map formatTransaction y
-      print formattedTransactions
-
-      -- let block = reportDateBlock opts
-      -- case block of
-      --   Just b -> do
-      --     case b of
-      --       "month" -> error "not yet implemented"
-      --       "year" -> error "not yet implemented"
-      --       _ -> putStrLn "unknown filter"
-      --   Nothing -> return ()
-      -- case reportType opts of
-      --   "list" -> error "not yet implemented"
-      --   _ -> putStrLn "unknown report"
+      printTransactions y
 
 parseAdd :: AddCommandOptions -> IO ()
 parseAdd opts = do
