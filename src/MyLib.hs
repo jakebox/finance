@@ -82,11 +82,8 @@ parseTransactionsFromFile fp = readFile fp >>= \c -> return (parse parseManyTran
 -- Reporting
 -----------------------
 spendingByCategory :: Category -> [Transaction] -> Map Category Double
-spendingByCategory cat = foldl (comb cat) M.empty
-
-comb :: Category -> Map Category Double -> Transaction -> Map Category Double
-comb c m trans = insertWith (+) c amt m where
-    amt = txAmount trans
+spendingByCategory category = foldl addToMap M.empty
+  where addToMap cur_map trans = insertWith (+) category (txAmount trans) cur_map
 
 -----------------------
 -- Filtering
