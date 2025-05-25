@@ -81,9 +81,9 @@ parseTransactionsFromFile fp = readFile fp >>= \c -> return (parse parseManyTran
 -----------------------
 -- Reporting
 -----------------------
-spendingByCategory :: Category -> [Transaction] -> Map Category Double
-spendingByCategory category = foldl addToMap M.empty
-  where addToMap cur_map trans = insertWith (+) category (txAmount trans) cur_map
+spendingByCategory :: [Transaction] -> Map Category Double
+spendingByCategory = foldl addToMap M.empty
+  where addToMap cur_map trans = insertWith (+) (txCategory trans) (txAmount trans) cur_map
 
 -----------------------
 -- Filtering
@@ -197,6 +197,6 @@ parseAndPrint = do
     Right transactions -> do
       putStrLn "Successfully read file"
       let filteredTransactions = filterByMonth 2025 5 transactions
-      let spendCats = spendingByCategory (CategoryName (pack "CoolMeal")) transactions 
+      let spendCats = spendingByCategory transactions 
       print filteredTransactions
       print spendCats
