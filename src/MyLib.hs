@@ -291,8 +291,10 @@ convertOptionsToTransaction opts = do
 
 applyDateBlockFilter :: Maybe String -> [Transaction] -> [Transaction]
 applyDateBlockFilter block transactions = case block of
-  Just "month" -> filterByMonth 2024 4 transactions
-  _ -> transactions
+  Just s -> case s of
+    "month" -> filterByMonth 2024 4 transactions
+    _ -> error "Not a valid time block"
+  Nothing -> transactions
 
 applyCategoryFilter :: Maybe String -> [Transaction] -> [Transaction]
 applyCategoryFilter category transactions = case category of
@@ -301,6 +303,12 @@ applyCategoryFilter category transactions = case category of
 
 printTransactions :: [Transaction] -> IO ()
 printTransactions = mapM_ (TIO.putStrLn . formatTransactionForCLI)
+
+printCategories :: Map Category Double -> IO ()
+printCategories categoriesMap =
+  mapM_
+    (\(cat, amt) -> TIO.putStrLn (categoryToText cat <> pack ": $" <>formatTransactionAmount amt))
+    (M.toList categoriesMap)
 
 parseReport :: ReportCommandOptions -> IO ()
 parseReport opts = do
@@ -314,7 +322,12 @@ parseReport opts = do
       let x = applyDateBlockFilter (reportDateBlock opts) transactions
       let y = applyCategoryFilter (reportCategory opts) x
 
-      printTransactions y
+      case reportType opts of
+        "list" -> do
+          printTransactions y
+        "category" -> do
+          printCategories (spendingByCategory y)
+        _ -> putStrLn "Invalid report type."
 
 parseAdd :: AddCommandOptions -> IO ()
 parseAdd opts = do
