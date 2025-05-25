@@ -1,16 +1,24 @@
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
-module MyLib (parseAndPrint) where
+module MyLib
+  ( parseAdd
+  , AddCommandOptions (..)
+  , ReportCommandOptions (..)
+  , Command (..)
+  , parseReport
+  ) where
 
 import Data.List
 import Data.Map.Strict (Map, insertWith)
 import qualified Data.Map.Strict as M
 import Data.Text (Text, pack)
+import qualified Data.Text.IO as T
 import Data.Time (Day, toGregorian)
 import Data.Time.Format (defaultTimeLocale, formatTime, parseTimeM)
-import Numeric (readFloat, readSigned)
+import Numeric (readFloat, readSigned, showFFloat)
 import Text.Parsec
 import Text.Parsec.String (Parser)
+import Data.Type.Coercion (trans)
 
 -- Internal types
 data Transaction = Transaction
@@ -89,18 +97,25 @@ formatTransaction t =
   formatTransactionDate (txDate t)
     <> pack " "
     <> txTitle t
-    <> indentationOutputNewline <> pack "Category: " <> categoryToText (txCategory t)
-    <> indentationOutputNewline <> pack "Amount: " <> formatTransactionAmount (txAmount t)
-    <> indentationOutputNewline <> pack "; " <> txDescription t
+    <> indentationOutputNewline
+    <> pack "Category: "
+    <> categoryToText (txCategory t)
+    <> indentationOutputNewline
+    <> pack "Amount: "
+    <> formatTransactionAmount (txAmount t)
+    <> indentationOutputNewline
+    <> pack "; "
+    <> txDescription t
+    <> pack "\n"
 
 formatTransactionDate :: Day -> Text
 formatTransactionDate d = pack (formatTime defaultTimeLocale "%Y-%m-%d" d)
 
 formatTransactionAmount :: Double -> Text
-formatTransactionAmount a = pack (show a)
+formatTransactionAmount a = pack (showFFloat (Just 2) a "")
 
 indentationOutput :: Text
-indentationOutput = pack (take 4 (repeat ' '))
+indentationOutput = pack (replicate 4 ' ')
 
 indentationOutputNewline :: Text
 indentationOutputNewline = pack "\n" <> indentationOutput
@@ -123,6 +138,9 @@ isInMonth :: Integer -> Integer -> Transaction -> Bool
 isInMonth tYear tMonth transaction = (tYear == y) && (tMonth == fromIntegral m)
   where
     (y, m, _) = toGregorian (txDate transaction)
+
+filterByCategory :: Category -> [Transaction] -> [Transaction]
+filterByCategory category = filter (\t -> txCategory t == category)
 
 -----------------------
 -- Parsers
@@ -214,18 +232,107 @@ parseMonthOrDayPart = count 2 digit
 parseDateString :: String -> String -> String -> String
 parseDateString y m d = intercalate "-" [y, m, d]
 
-parseAndPrint :: IO ()
-parseAndPrint = do
+data Command
+  = AddCommand AddCommandOptions
+  | ReportCommand ReportCommandOptions
+  deriving (Show)
+
+data ReportCommandOptions = ReportCommandOptions
+  { reportType :: String
+  , reportDateBlock :: Maybe String
+  , reportCategory :: Maybe String
+  }
+  deriving (Show)
+
+data AddCommandOptions = AddCommandOptions
+  { addDate :: String
+  , addTitle :: String
+  , addNote :: Maybe String
+  , addCategory :: String
+  , addAmount :: String
+  }
+  deriving (Show)
+
+safeParseDate :: String -> Maybe Day
+safeParseDate = parseTimeM True defaultTimeLocale "%Y-%m-%d"
+
+safeParseCategory :: String -> Maybe Category
+safeParseCategory catStr =
+  Just (CategoryName (pack catStr)) -- Assuming the category is always valid
+
+safeParseAmount :: String -> Maybe Double
+safeParseAmount amountStr =
+  case readSigned readFloat amountStr of
+    [(val, "")] -> Just val
+    _ -> Nothing -- Invalid amount format, return Nothing
+
+convertOptionsToTransaction :: AddCommandOptions -> Maybe Transaction
+convertOptionsToTransaction opts = do
+  parsedDate <- safeParseDate (addDate opts)
+  parsedCategory <- safeParseCategory (addCategory opts)
+  parsedAmount <- safeParseAmount (addAmount opts)
+  let packedTitle = pack (addTitle opts)
+  let packedDescription = maybe (pack "") pack (addNote opts)
+
+  return
+    Transaction
+      { txDate = parsedDate
+      , txTitle = packedTitle
+      , txDescription = packedDescription
+      , txCategory = parsedCategory
+      , txAmount = parsedAmount
+      }
+
+applyDateBlockFilter :: Maybe String -> [Transaction] -> [Transaction]
+applyDateBlockFilter block transactions = case block of
+  Just "month" -> filterByMonth 2024 4 transactions
+  _ -> transactions
+
+
+applyCategoryFilter :: Maybe String -> [Transaction] -> [Transaction]
+applyCategoryFilter category transactions = case category of
+  Just c -> filterByCategory (CategoryName (pack c)) transactions
+  _ -> transactions
+
+parseReport :: ReportCommandOptions -> IO ()
+parseReport opts = do
   let filePath = "transactions.fin"
   result <- parseTransactionsFromFile filePath
 
   case result of
     Left err -> do
-      putStrLn $ "Error processing file, this is the error: \n" ++ show err
+      putStrLn $ "Error processing file: \n" ++ show err
     Right transactions -> do
-      putStrLn "Successfully read file"
-      let filteredTransactions = filterByMonth 2024 4 transactions
-      let spendCats = spendingByCategory transactions
-      let formattedTransactions = map formatTransaction filteredTransactions
-      mapM_ print formattedTransactions
-      print spendCats
+      -- let spendCats = spendingByCategory transactions
+      -- let formattedTransactions = map formatTransaction filteredTransactions
+      -- mapM_ print formattedTransactions
+      -- print spendCats
+      print (reportDateBlock opts)
+      let x = applyDateBlockFilter (reportDateBlock opts) transactions
+      let y = applyCategoryFilter (reportCategory opts) x
+
+      let formattedTransactions = map formatTransaction y
+      print formattedTransactions
+
+      -- let block = reportDateBlock opts
+      -- case block of
+      --   Just b -> do
+      --     case b of
+      --       "month" -> error "not yet implemented"
+      --       "year" -> error "not yet implemented"
+      --       _ -> putStrLn "unknown filter"
+      --   Nothing -> return ()
+      -- case reportType opts of
+      --   "list" -> error "not yet implemented"
+      --   _ -> putStrLn "unknown report"
+
+parseAdd :: AddCommandOptions -> IO ()
+parseAdd opts = do
+  let trans = convertOptionsToTransaction opts
+  case trans of
+    Just transaction -> do
+      T.appendFile "./transactions.fin" (formatTransaction transaction <> pack "\n")
+      putStrLn "Successfully wrote transaction"
+    Nothing ->
+      putStrLn
+        "Failed to parse Add options into Transaction. Please check the input values."
