@@ -4,13 +4,13 @@ module MyLib (parseAndPrint) where
 
 import Data.List
 import Data.Map.Strict (Map, insertWith)
+import qualified Data.Map.Strict as M
 import Data.Text (Text, pack)
 import Data.Time (Day, toGregorian)
-import Data.Time.Format (defaultTimeLocale, parseTimeM)
+import Data.Time.Format (defaultTimeLocale, formatTime, parseTimeM)
 import Numeric (readFloat, readSigned)
 import Text.Parsec
 import Text.Parsec.String (Parser)
-import qualified Data.Map.Strict as M
 
 -- Internal types
 data Transaction = Transaction
@@ -21,6 +21,9 @@ data Transaction = Transaction
   , txAmount :: Double
   }
   deriving (Show)
+
+categoryToText :: Category -> Text
+categoryToText (CategoryName name) = name
 
 newtype Category = CategoryName Text
   deriving (Eq, Ord, Show)
@@ -79,11 +82,36 @@ parseTransactionsFromFile fp = readFile fp >>= \c -> return (parse parseManyTran
 --     return parseResult
 
 -----------------------
+-- Formatting output
+-----------------------
+formatTransaction :: Transaction -> Text
+formatTransaction t =
+  formatTransactionDate (txDate t)
+    <> pack " "
+    <> txTitle t
+    <> indentationOutputNewline <> pack "Category: " <> categoryToText (txCategory t)
+    <> indentationOutputNewline <> pack "Amount: " <> formatTransactionAmount (txAmount t)
+    <> indentationOutputNewline <> pack "; " <> txDescription t
+
+formatTransactionDate :: Day -> Text
+formatTransactionDate d = pack (formatTime defaultTimeLocale "%Y-%m-%d" d)
+
+formatTransactionAmount :: Double -> Text
+formatTransactionAmount a = pack (show a)
+
+indentationOutput :: Text
+indentationOutput = pack (take 4 (repeat ' '))
+
+indentationOutputNewline :: Text
+indentationOutputNewline = pack "\n" <> indentationOutput
+
+-----------------------
 -- Reporting
 -----------------------
 spendingByCategory :: [Transaction] -> Map Category Double
 spendingByCategory = foldl addToMap M.empty
-  where addToMap cur_map trans = insertWith (+) (txCategory trans) (txAmount trans) cur_map
+  where
+    addToMap cur_map trans = insertWith (+) (txCategory trans) (txAmount trans) cur_map
 
 -----------------------
 -- Filtering
@@ -196,7 +224,8 @@ parseAndPrint = do
       putStrLn $ "Error processing file, this is the error: \n" ++ show err
     Right transactions -> do
       putStrLn "Successfully read file"
-      let filteredTransactions = filterByMonth 2025 5 transactions
-      let spendCats = spendingByCategory transactions 
-      print filteredTransactions
+      let filteredTransactions = filterByMonth 2024 4 transactions
+      let spendCats = spendingByCategory transactions
+      let formattedTransactions = map formatTransaction filteredTransactions
+      mapM_ print formattedTransactions
       print spendCats
