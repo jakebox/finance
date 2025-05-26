@@ -1,17 +1,17 @@
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
-
 module MyLib
   ( parseAdd
   , AddCommandOptions (..)
   , ReportCommandOptions (..)
+  , SearchCommandOptions (..)
   , Command (..)
   , parseReport
+  , parseSearch
   ) where
 
 import Data.List
 import Data.Map.Strict (Map, insertWith)
 import qualified Data.Map.Strict as M
-import Data.Text (Text, null, pack)
+import Data.Text (Text, null, pack, toLower)
 import qualified Data.Text.IO as T
 import qualified Data.Text.IO as TIO
 import Data.Time (Day, toGregorian)
@@ -28,7 +28,7 @@ data Transaction = Transaction
   , txCategory :: Category
   , txAmount :: Double
   }
-  deriving (Show)
+  deriving (Show, Eq, Ord)
 
 categoryToText :: Category -> Text
 categoryToText (CategoryName name) = name
@@ -57,6 +57,13 @@ data TransactionInfo = TransactionInfo
   }
   deriving (Show)
 
+data SearchTerm
+  = SearchByAmount Double
+  | SearchByDate String
+  | SearchByTitle String
+  | SearchByCategory String
+  deriving (Show)
+
 -- File format example
 {--
 YYYY-MM-DD Title
@@ -65,16 +72,16 @@ YYYY-MM-DD Title
     Amount: 12.34
 --}
 
-testParseData :: String
-testParseData =
-  "2025-05-23 Trader Joe's\n\
-  \   Category: CoolMeal\n\
-  \   Amount: 12.34\n\
-  \   ; Optional description\n\
-  \ \n"
+-- testParseData :: String
+-- testParseData =
+--   "2025-05-23 Trader Joe's\n\
+--   \   Category: CoolMeal\n\
+--   \   Amount: 12.34\n\
+--   \   ; Optional description\n\
+--   \ \n"
 
-testTransactionParser :: Either ParseError Transaction
-testTransactionParser = parse parseTransaction "test data" testParseData
+-- testTransactionParser :: Either ParseError Transaction
+-- testTransactionParser = parse parseTransaction "test data" testParseData
 
 -----------------------
 -- IO
@@ -132,7 +139,7 @@ indentationOutputNewline = pack "\n" <> pack (replicate 4 ' ')
 spendingByCategory :: [Transaction] -> Map Category Double
 spendingByCategory = foldl addToMap M.empty
   where
-    addToMap cur_map trans = insertWith (+) (txCategory trans) (txAmount trans) cur_map
+    addToMap cur_map ts = insertWith (+) (txCategory ts) (txAmount ts) cur_map
 
 -----------------------
 -- Filtering
@@ -147,6 +154,15 @@ isInMonth tYear tMonth transaction = (tYear == y) && (tMonth == fromIntegral m)
 
 filterByCategory :: Category -> [Transaction] -> [Transaction]
 filterByCategory category = filter (\t -> txCategory t == category)
+
+searchFilter :: [SearchTerm] -> [Transaction] -> [Transaction]
+searchFilter [] transactions = transactions
+searchFilter (x:xs) transactions = searchFilter xs latestFilter
+  where
+    latestFilter = case x of
+      SearchByAmount amt -> filter (\t -> txAmount t == amt) transactions
+      SearchByTitle title -> filter (\t -> toLower(txTitle t) == toLower (pack title)) transactions
+      _ -> error "unimplemeneted"
 
 -----------------------
 -- Parsers
@@ -213,9 +229,6 @@ parseAmountValue = combine <$> many1 digit <*> char '.' <*> count 2 digit
 parseTitle :: Parser Text
 parseTitle = pack <$> manyTill anyChar endOfLine
 
-parseOptionalDescription :: Parser Text
-parseOptionalDescription = pack <$> (char ';' *> manyTill anyChar endOfLine)
-
 -- Parse a date string 'YYYY-MM-DD' into a Day type
 parseDate :: Parser Day
 parseDate = do
@@ -238,9 +251,28 @@ parseMonthOrDayPart = count 2 digit
 parseDateString :: String -> String -> String -> String
 parseDateString y m d = intercalate "-" [y, m, d]
 
+-- Search parsers
+parseSearchTitle :: Parser SearchTerm
+parseSearchTitle = SearchByTitle <$> (string "title:" *> manyTill anyChar (() <$ space <|> eof))
+
+parseSearchAmount :: Parser SearchTerm
+parseSearchAmount = do
+  x <- string "amount:" *> manyTill anyChar (() <$ space <|> eof)
+  case safeParseAmount x of
+    Just val -> return (SearchByAmount val)
+    _ -> fail "Bad amount value"
+
+parseSearchTerms :: Parser [SearchTerm]
+parseSearchTerms = (parseSearchTitle <|> parseSearchAmount) `sepBy1` spaces
+
+-----------------------
+-- Commands
+-----------------------
+
 data Command
   = AddCommand AddCommandOptions
   | ReportCommand ReportCommandOptions
+  | SearchCommand SearchCommandOptions
   deriving (Show)
 
 data ReportCommandOptions = ReportCommandOptions
@@ -256,6 +288,11 @@ data AddCommandOptions = AddCommandOptions
   , addNote :: Maybe String
   , addCategory :: String
   , addAmount :: String
+  }
+  deriving (Show)
+
+newtype SearchCommandOptions = SearchCommandOptions
+  { query :: String
   }
   deriving (Show)
 
@@ -307,7 +344,9 @@ printTransactions = mapM_ (TIO.putStrLn . formatTransactionForCLI)
 printCategories :: Map Category Double -> IO ()
 printCategories categoriesMap =
   mapM_
-    (\(cat, amt) -> TIO.putStrLn (categoryToText cat <> pack ": $" <>formatTransactionAmount amt))
+    ( \(cat, amt) ->
+        TIO.putStrLn (categoryToText cat <> pack ": $" <> formatTransactionAmount amt)
+    )
     (M.toList categoriesMap)
 
 parseReport :: ReportCommandOptions -> IO ()
@@ -324,18 +363,30 @@ parseReport opts = do
 
       case reportType opts of
         "list" -> do
-          printTransactions y
+          printTransactions (sort y)
         "category" -> do
           printCategories (spendingByCategory y)
         _ -> putStrLn "Invalid report type."
 
 parseAdd :: AddCommandOptions -> IO ()
 parseAdd opts = do
-  let trans = convertOptionsToTransaction opts
-  case trans of
+  let ts = convertOptionsToTransaction opts
+  case ts of
     Just transaction -> do
       T.appendFile "./transactions.fin" (formatTransaction transaction <> pack "\n")
       putStrLn "Successfully wrote transaction"
     Nothing ->
       putStrLn
         "Failed to parse Add options into Transaction. Please check the input values."
+
+parseSearch :: SearchCommandOptions -> IO ()
+parseSearch opts = do
+  let terms = parse parseSearchTerms "input" (query opts)  -- (query opts) extracts query terms as String
+  case terms of
+    Left err -> putStrLn $ "Error on search terms input: " ++ show err
+    Right x -> do
+      let filePath = "transactions.fin"
+      result <- parseTransactionsFromFile filePath
+      case result of
+        Left err -> putStrLn $ "Error processing file: \n" ++ show err
+        Right transactions -> printTransactions (searchFilter x transactions)
