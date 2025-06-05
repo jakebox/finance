@@ -9,25 +9,23 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  MyLib
-    -- other-modules:
-    -- other-extensions:
+    exposed-modules:  Finance.Core, Finance.Types, Finance.Utils
     build-depends:    base ^>=4.17.2.1
         , parsec
         , text
         , time
         , containers
+        , yaml
+        , aeson
+        , Decimal
     hs-source-dirs:   src
     default-language: Haskell2010
 
 executable finance
     import:           warnings
     main-is:          Main.hs
-    -- other-modules:
-    -- other-extensions:
     build-depends:
-        base ^>=4.17.2.1,
-        finance
+        base ^>=4.17.2.1
         , optparse-applicative
 
     hs-source-dirs:   exe
