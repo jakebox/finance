@@ -14,7 +14,7 @@ import Data.Decimal (Decimal)
 import Data.Map.Strict (Map)
 import qualified Data.Text as T (Text, pack)
 import Data.Time (Day)
-import Data.Time.Calendar.Month (Month)
+import Data.Time.Calendar.Month
 
 newtype Category = Category T.Text
   deriving (Eq, Show, Ord)
@@ -32,7 +32,7 @@ data Transaction = Transaction
 
 data Budget = Budget
   { bdDate :: Month
-  , bd :: Map Category Decimal
+  , bd :: BudgetedAmounts
   }
   deriving (Eq, Show)
 
