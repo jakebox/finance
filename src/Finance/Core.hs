@@ -5,6 +5,8 @@
 module Finance.Core
   (filterTransactions
   , spendingByCategory 
+  , spendingByPurchaseCategory
+  , getSubcategoryBreakdown
   ) where
 
 import Data.Decimal (Decimal)

@@ -20,19 +20,18 @@ reportCommandParser :: Parser ReportCommandOptions
 reportCommandParser =
   ReportCommandOptions
     <$> argument str (metavar "TYPE")
-    <*> optional (strOption (metavar "CATEGORY"))
+    <*> optional (argument str (metavar "CATEGORY"))
 
 runReport :: ReportCommandOptions -> IO ()
 runReport ReportCommandOptions {rType, rCategory} = do
   let fp = "transactions.csv"
   txs <- readTransactionFile fp
-  print txs
-
---     Left err -> error "Error processing file: " <> show err
---     Right txs -> do
---         let f = filterTransactions txs filterPs
---         case rType of
---           "category" -> spendingByCategory f
---           _ -> error "not implemented"
--- where
---   filterPs = undefined
+  case rType of
+    "summary" -> print $ spendingByCategory txs
+    "category" ->
+      case rCategory of
+        Just category -> print $ subcategories category . spendingByPurchaseCategory $ txs
+        Nothing -> putStrLn "Provide a category"
+    _ -> putStrLn "Not a valid category type"
+  where
+    subcategories cat = getSubcategoryBreakdown (categoryFromString cat)
