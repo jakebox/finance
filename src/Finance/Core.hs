@@ -3,7 +3,8 @@
 {-# HLINT ignore "Redundant lambda" #-}
 {-# HLINT ignore "Eta reduce" #-}
 module Finance.Core
-  (
+  (filterTransactions
+  , spendingByCategory 
   ) where
 
 import Data.Decimal (Decimal)

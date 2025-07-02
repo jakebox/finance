@@ -5,19 +5,24 @@ author:             Jake B
 build-type:         Simple
 
 common warnings
-    ghc-options: -Wall
+    ghc-options: -Werror
 
 library
     import:           warnings
-    exposed-modules:  Finance.Core, Finance.Types, Finance.Utils
+    exposed-modules:  Finance.Core, Finance.Commands
+    other-modules:  Finance.Types, Finance.Utils, Finance.Input
     build-depends:    base ^>=4.17.2.1
         , parsec
         , text
         , time
+        , bytestring
         , containers
         , yaml
         , aeson
+        , optparse-applicative
         , Decimal
+        , cassava
+        , vector
     hs-source-dirs:   src
     default-language: Haskell2010
 
@@ -27,6 +32,7 @@ executable finance
     build-depends:
         base ^>=4.17.2.1
         , optparse-applicative
+        , finance
 
     hs-source-dirs:   exe
     default-language: Haskell2010

@@ -8,12 +8,13 @@ module Finance.Types
   , categoryFromString
   , AggregatedSpending
   , BudgetedAmounts
+  , Filter
   ) where
 
 import Data.Decimal (Decimal)
 import Data.Map.Strict (Map)
 import qualified Data.Text as T (Text, pack)
-import Data.Time (Day)
+import Data.Time
 import Data.Time.Calendar.Month
 
 newtype Category = Category T.Text
@@ -27,6 +28,7 @@ data Transaction = Transaction
   , txDate :: Day
   , txAmount :: Decimal
   , txCategory :: Category
+  , txNote :: T.Text
   }
   deriving (Eq, Show)
 
@@ -45,4 +47,12 @@ data BudgetComparison = BudgetComparison
   deriving (Eq, Ord, Show)
 
 type AggregatedSpending = Map Category Decimal
-type BudgetedAmounts    = Map Category Decimal
+type BudgetedAmounts = Map Category Decimal
+
+data Filter
+  = FilterDate Day
+  | MonthFilter MonthOfYear
+  | DateRangeFilter Day Day
+  | AmountFilter Decimal
+  | TitleFilter T.Text
+  deriving (Show, Eq)
