@@ -5,13 +5,15 @@ author:             Jake B
 build-type:         Simple
 
 common warnings
-    ghc-options: -Werror
+    ghc-options:
+        -Wwarn
+        -Widentities
+        -Wunused-packages
 
 library
     import:           warnings
-    exposed-modules:  Finance.Core, Finance.Commands
-    other-modules:  Finance.Types, Finance.Utils, Finance.Input
-    build-depends:    base ^>=4.17.2.1
+    exposed-modules:  Finance.Core, Finance.Commands, Finance.Types, Finance.Utils, Finance.Input
+    build-depends:    base
         , parsec
         , text
         , time
@@ -25,12 +27,13 @@ library
         , vector
     hs-source-dirs:   src
     default-language: Haskell2010
+    default-extensions:      ScopedTypeVariables, OverloadedStrings, InstanceSigs, FlexibleInstances
 
 executable finance
     import:           warnings
     main-is:          Main.hs
     build-depends:
-        base ^>=4.17.2.1
+        base
         , optparse-applicative
         , finance
 
