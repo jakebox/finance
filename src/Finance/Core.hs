@@ -11,6 +11,7 @@ module Finance.Core
   , amountEquals
   , matchesMonth
   , titleInfix
+  , identityFilter
   ) where
 
 import Data.Decimal (Decimal)
@@ -27,6 +28,9 @@ import Finance.Utils
 ----------------
 
 -- Filter predicates
+
+identityFilter :: TransactionFilterP
+identityFilter = \t -> True
 
 matchesDate :: Day -> TransactionFilterP
 matchesDate targetDate = \t -> txDate t == targetDate
@@ -45,7 +49,7 @@ titleInfix :: T.Text -> TransactionFilterP
 titleInfix title = \t -> title `T.isInfixOf` txTitle t
 
 -- Combine predicates to a single predicate
-combinePredicateFilters :: [TransactionFilterP] -> (TransactionFilterP)
+combinePredicateFilters :: [TransactionFilterP] -> TransactionFilterP
 combinePredicateFilters predicates = \transaction -> Prelude.all (\p -> p transaction) predicates
 
 -- Filter a list of transactions

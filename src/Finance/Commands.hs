@@ -8,30 +8,34 @@ import Finance.Types
 
 import Options.Applicative
 
+
+transactionsFile :: FilePath = "transactions.csv"
+
 newtype Command = ReportCommand ReportCommandOptions
 
 data ReportCommandOptions = ReportCommandOptions
   { rType :: String
-  , rCategory :: Maybe String
-  -- , rFilters :: Maybe [Filter]
+--  , rCategory :: Maybe String
+  , rFilters :: Maybe String
   }
 
 reportCommandParser :: Parser ReportCommandOptions
 reportCommandParser =
   ReportCommandOptions
     <$> argument str (metavar "TYPE")
-    <*> optional (argument str (metavar "CATEGORY"))
+--    <*> optional (argument str (metavar "CATEGORY"))
+    <*> optional (argument str (metavar "FILTERS"))
 
 runReport :: ReportCommandOptions -> IO ()
-runReport ReportCommandOptions {rType, rCategory} = do
-  let fp = "transactions.csv"
-  txs <- readTransactionFile fp
+runReport ReportCommandOptions {rType, rFilters} = do
+  txs <- readTransactionFile transactionsFile
+  let filtered_txs = filterTransactions txs (stringToFilters rFilters)
   case rType of
-    "summary" -> print $ spendingByCategory txs
-    "category" ->
-      case rCategory of
-        Just category -> print $ subcategories category . spendingByPurchaseCategory $ txs
-        Nothing -> putStrLn "Provide a category"
-    _ -> putStrLn "Not a valid category type"
+    "summary" -> print $ spendingByCategory filtered_txs
+    -- "category" ->
+    --   case rCategory of
+    --     Just category -> print $ subcategories category . spendingByPurchaseCategory $ txs
+    --     Nothing -> putStrLn "Provide a category"
+    _ -> putStrLn "Not a valid report type"
   where
     subcategories cat = getSubcategoryBreakdown (categoryFromString cat)

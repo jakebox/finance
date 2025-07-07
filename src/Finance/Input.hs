@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
-module Finance.Input (readTransactionFile) where
+module Finance.Input (readTransactionFile, stringToFilters) where
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Csv
@@ -56,16 +56,18 @@ readTransactionFile fp = do
 
 -- --- Parsers
 
--- We want a parser for each possible filter type
-   -- matchesDate
-   -- matchesMonth DONE
-   -- dateWithin
-   -- amountEquals DONE
-   -- titleInfix DONE
+stringToFilters :: Maybe String -> TransactionFilterP
+stringToFilters s = case s of
+  Just s -> case parse parseAnyFilter "input" s of
+      Left err -> identityFilter
+      Right fs -> combinePredicateFilters fs
+  Nothing -> identityFilter
 
--- parseFilters :: P.Parser [Filter]
--- parseFilters = do
---   filters <- combinePredicateFilters <$> 
+parseAnyFilter :: P.Parser [TransactionFilterP]
+parseAnyFilter = many1 (
+    try (spaces >> parseAmountFilter) <|> 
+    try (spaces >> parseMonthFilter) <|> 
+    try (spaces >> parseTitleFilter))
 
 parseAmountFilter :: P.Parser TransactionFilterP
 parseAmountFilter = amountEquals <$> parseAmount
@@ -80,7 +82,6 @@ parseTitleFilter = titleInfix <$> parseTitle
 
 parseAmount :: P.Parser Decimal
 parseAmount = do
-  -- _ <- option ' ' (char '$')
   _ <- char '$' 
   whole <- many1 digit
   frac <- option "" ((:) <$> char '.' <*> many1 digit)
@@ -89,24 +90,26 @@ parseAmount = do
 
 parseMonth :: P.Parser MonthOfYear
 parseMonth = do
-  monthStr <- many1 anyChar
-  pure $ arbitraryMonToMonth monthStr
+  monthStr <- many1 (noneOf " \n")
+  case arbitraryMonToMonth monthStr of
+    Just m -> pure m
+    Nothing -> fail "Not a month"
 
 parseTitle :: P.Parser T.Text
-parseTitle = T.pack <$> many1 anyChar
+parseTitle = T.pack <$> many1 (noneOf " \n")
 
-arbitraryMonToMonth :: String -> MonthOfYear
+arbitraryMonToMonth :: String -> Maybe MonthOfYear
 arbitraryMonToMonth s 
-  | s == "jan" || s == "january" || s == "01" || s == "1" = 1
-  | s == "feb" || s == "february" || s == "02" || s == "2" = 2
-  | s == "mar" || s == "march" || s == "03" || s == "3" = 3
-  | s == "apr" || s == "april" || s == "04" || s == "4" = 4
-  | s == "may" || s == "05" || s == "5" = 5
-  | s == "jun" || s == "june" || s == "06" || s == "6" = 6
-  | s == "jul" || s == "july" || s == "07" || s == "7" = 7
-  | s == "aug" || s == "august" || s == "08" || s == "8" = 8
-  | s == "sep" || s == "september" || s == "09" || s == "9" = 9
-  | s == "oct" || s == "october" || s == "10" || s == "10" = 10
-  | s == "nov" || s == "november" || s == "11" || s == "11" = 11
-  | s == "dec" || s == "december" || s == "12" || s == "12" = 12
-  | otherwise = error $ "Invalid month string: " ++ s
+  | s == "jan" || s == "january" || s == "01" || s == "1" = Just 1
+  | s == "feb" || s == "february" || s == "02" || s == "2" = Just 2
+  | s == "mar" || s == "march" || s == "03" || s == "3" = Just 3
+  | s == "apr" || s == "april" || s == "04" || s == "4" = Just 4
+  | s == "may" || s == "05" || s == "5" = Just 5
+  | s == "jun" || s == "june" || s == "06" || s == "6" = Just 6
+  | s == "jul" || s == "july" || s == "07" || s == "7" = Just 7
+  | s == "aug" || s == "august" || s == "08" || s == "8" = Just 8
+  | s == "sep" || s == "september" || s == "09" || s == "9" = Just 9
+  | s == "oct" || s == "october" || s == "10" || s == "10" = Just 10
+  | s == "nov" || s == "november" || s == "11" || s == "11" = Just 11
+  | s == "dec" || s == "december" || s == "12" || s == "12" = Just 12
+  | otherwise = Nothing
