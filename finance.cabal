@@ -19,8 +19,6 @@ library
         , time
         , bytestring
         , containers
-        , yaml
-        , aeson
         , optparse-applicative
         , Decimal
         , cassava
