@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
-module Finance.Input (readTransactionFile, parseMonth) where
+module Finance.Input (readTransactionFile) where
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Csv
@@ -9,11 +9,14 @@ import Data.Decimal
 import Data.Time (Day)
 import Data.Time.Calendar (MonthOfYear)
 import qualified Data.Vector as V
+
+import Finance.Core
 import Finance.Types
 import Finance.Utils
 
 import Text.Parsec
 import qualified Text.Parsec.String as P (Parser)
+import qualified Data.Text as T
 
 instance FromField Day where
   parseField :: Field -> Parser Day
@@ -52,10 +55,45 @@ readTransactionFile fp = do
 
 
 -- --- Parsers
+
+-- We want a parser for each possible filter type
+   -- matchesDate
+   -- matchesMonth DONE
+   -- dateWithin
+   -- amountEquals DONE
+   -- titleInfix DONE
+
+-- parseFilters :: P.Parser [Filter]
+-- parseFilters = do
+--   filters <- combinePredicateFilters <$> 
+
+parseAmountFilter :: P.Parser TransactionFilterP
+parseAmountFilter = amountEquals <$> parseAmount
+
+parseMonthFilter :: P.Parser TransactionFilterP
+parseMonthFilter = matchesMonth <$> parseMonth
+
+parseTitleFilter :: P.Parser TransactionFilterP
+parseTitleFilter = titleInfix <$> parseTitle
+
+----------
+
+parseAmount :: P.Parser Decimal
+parseAmount = do
+  -- _ <- option ' ' (char '$')
+  _ <- char '$' 
+  whole <- many1 digit
+  frac <- option "" ((:) <$> char '.' <*> many1 digit)
+  let fullNumStr = whole ++ frac
+  pure $ realFracToDecimal 2 (read fullNumStr)
+
 parseMonth :: P.Parser MonthOfYear
 parseMonth = do
   monthStr <- many1 anyChar
   pure $ arbitraryMonToMonth monthStr
+
+parseTitle :: P.Parser T.Text
+parseTitle = T.pack <$> many1 anyChar
 
 arbitraryMonToMonth :: String -> MonthOfYear
 arbitraryMonToMonth s 

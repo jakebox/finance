@@ -7,6 +7,10 @@ module Finance.Core
   , spendingByCategory 
   , spendingByPurchaseCategory
   , getSubcategoryBreakdown
+  , combinePredicateFilters
+  , amountEquals
+  , matchesMonth
+  , titleInfix
   ) where
 
 import Data.Decimal (Decimal)
@@ -24,28 +28,28 @@ import Finance.Utils
 
 -- Filter predicates
 
-matchesDate :: Day -> (Transaction -> Bool)
+matchesDate :: Day -> TransactionFilterP
 matchesDate targetDate = \t -> txDate t == targetDate
 
-matchesMonth :: MonthOfYear -> (Transaction -> Bool)
+matchesMonth :: MonthOfYear -> TransactionFilterP
 matchesMonth targetMonth = \t -> case toGregorian $ txDate t of
   (_, m, _) -> m == targetMonth
 
-dateWithin :: Day -> Day -> (Transaction -> Bool)
+dateWithin :: Day -> Day -> TransactionFilterP
 dateWithin d1 d2 = \t -> txDate t <= d2 && txDate t >= d1
 
-amountEquals :: Decimal -> (Transaction -> Bool)
+amountEquals :: Decimal -> TransactionFilterP
 amountEquals amt = \t -> txAmount t == amt
 
-titleInfix :: T.Text -> (Transaction -> Bool)
+titleInfix :: T.Text -> TransactionFilterP
 titleInfix title = \t -> title `T.isInfixOf` txTitle t
 
 -- Combine predicates to a single predicate
-combinePredicateFilters :: [Transaction -> Bool] -> (Transaction -> Bool)
+combinePredicateFilters :: [TransactionFilterP] -> (TransactionFilterP)
 combinePredicateFilters predicates = \transaction -> Prelude.all (\p -> p transaction) predicates
 
 -- Filter a list of transactions
-filterTransactions :: [Transaction] -> (Transaction -> Bool) -> [Transaction]
+filterTransactions :: [Transaction] -> (TransactionFilterP) -> [Transaction]
 filterTransactions txs filters = filter filters txs
 
 ---------------

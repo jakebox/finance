@@ -9,6 +9,7 @@ module Finance.Types
   , AggregatedSpending
   , BudgetedAmounts
   , Filter
+  , TransactionFilterP
   ) where
 
 import Data.Decimal (Decimal)
@@ -56,3 +57,5 @@ data Filter
   | AmountFilter Decimal
   | TitleFilter T.Text
   deriving (Show, Eq)
+
+type TransactionFilterP = Transaction -> Bool
