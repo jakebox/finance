@@ -9,11 +9,11 @@ common warnings
         -Wwarn
         -Widentities
         -Wunused-packages
-    default-extensions: ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances, InstanceSigs, OverloadedStrings
+    default-extensions: ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances, InstanceSigs, OverloadedStrings, OverloadedRecordDot
 
 library
     import:           warnings
-    exposed-modules:  Finance.Core, Finance.Commands, Finance.Types, Finance.Utils, Finance.Input
+    exposed-modules:  Finance.Core, Finance.Commands, Finance.Types, Finance.Utils, Finance.Input, Finance.PrettyPrint
     build-depends:    base
         , bytestring
         , parsec

@@ -10,16 +10,20 @@ module Finance.Types
   , BudgetedAmounts
   , Filter
   , TransactionFilterP
+  , getCategoryText
   ) where
 
 import Data.Decimal (Decimal)
 import Data.Map.Strict (Map)
-import qualified Data.Text as T (Text, pack)
+import qualified Data.Text as T
 import Data.Time
 import Data.Time.Calendar.Month
 
 newtype Category = Category T.Text
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Ord, Show)
+
+getCategoryText :: Category -> T.Text
+getCategoryText (Category txt) = txt
 
 categoryFromString :: String -> Category
 categoryFromString s = Category $ T.pack s

@@ -5,6 +5,9 @@ module Finance.Commands (runReport, reportCommandParser, Command(..)) where
 import Finance.Core
 import Finance.Input
 import Finance.Types
+import Finance.PrettyPrint
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 import Options.Applicative
 
@@ -31,7 +34,7 @@ runReport ReportCommandOptions {rType, rFilters} = do
   txs <- readTransactionFile transactionsFile
   let filtered_txs = filterTransactions txs (stringToFilters rFilters)
   case rType of
-    "summary" -> print $ spendingByCategory filtered_txs
+    "summary" -> T.putStrLn . ppAggregatedSpending $ spendingByCategory filtered_txs
     -- "category" ->
     --   case rCategory of
     --     Just category -> print $ subcategories category . spendingByPurchaseCategory $ txs
