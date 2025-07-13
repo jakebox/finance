@@ -12,6 +12,8 @@ module Finance.Core
   , matchesMonth
   , titleInfix
   , identityFilter
+  , budgetVersusSpending
+  , testBudget
   ) where
 
 import Data.Decimal (Decimal)
@@ -146,7 +148,10 @@ testBudget =
   Budget
     (MkMonth 24305)
     ( Map.fromList
-        [ (categoryFromString "CasualMeal", 100.0 :: Decimal)
-        , (categoryFromString "Groceries", 50.0 :: Decimal)
+        [ (categoryFromString "Food", 280.0 :: Decimal)
+        , (categoryFromString "Transport", 250.0 :: Decimal)
+        , (categoryFromString "Discretionary", 50.0 :: Decimal)
+        , (categoryFromString "Necessities", 35.0 :: Decimal)
+        , (categoryFromString "Social", 25.0 :: Decimal)
         ]
     )

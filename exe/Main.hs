@@ -16,6 +16,12 @@ mainParser =
               (helper <*> (ReportCommand <$> reportCommandParser))
               (progDesc "Alias for report")
           )
+        <> command
+          "budget"
+          ( info
+              (helper <*> (BudgetCommand <$> budgetCommandParser))
+              (progDesc "Budgets")
+          )
     )
 
 main :: IO ()
@@ -24,3 +30,4 @@ main = do
     execParser (info mainParser (fullDesc <> progDesc "Financial Tracker CLI"))
   case cmd of
     ReportCommand opts -> runReport opts
+    BudgetCommand opts -> runBudget opts

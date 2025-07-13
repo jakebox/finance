@@ -1,33 +1,57 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Finance.Commands (runReport, reportCommandParser, Command(..)) where
+module Finance.Commands (runReport, reportCommandParser, runBudget, budgetCommandParser, Command (..)) where
 
-import Finance.Core
-import Finance.Input
-import Finance.Types
-import Finance.PrettyPrint
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import Finance.Core
+import Finance.Input
+import Finance.PrettyPrint
+import Finance.Types
 
 import Options.Applicative
 
-
 transactionsFile :: FilePath = "transactions.csv"
 
-newtype Command = ReportCommand ReportCommandOptions
+data Command
+  = ReportCommand ReportCommandOptions
+  | BudgetCommand BudgetCommandOptions
+
+data BudgetCommandOptions = BudgetCommandOptions
+  { bAction :: String
+  , bMonth :: String
+  }
 
 data ReportCommandOptions = ReportCommandOptions
   { rType :: String
---  , rCategory :: Maybe String
-  , rFilters :: Maybe String
+  , --  , rCategory :: Maybe String
+    rFilters :: Maybe String
   }
 
 reportCommandParser :: Parser ReportCommandOptions
 reportCommandParser =
   ReportCommandOptions
     <$> argument str (metavar "TYPE")
---    <*> optional (argument str (metavar "CATEGORY"))
+    --    <*> optional (argument str (metavar "CATEGORY"))
     <*> optional (argument str (metavar "FILTERS"))
+
+budgetCommandParser :: Parser BudgetCommandOptions
+budgetCommandParser =
+  BudgetCommandOptions
+    <$> argument str (metavar "ACTION")
+    <*> argument str (metavar "MONTH")
+
+runBudget :: BudgetCommandOptions -> IO ()
+runBudget BudgetCommandOptions {bAction, bMonth} = do
+  txs <- readTransactionFile transactionsFile
+  case bAction of
+    "check" -> do
+      let comparison = budgetVersusSpending (spendingByCategory txs) (bd Finance.Core.testBudget)
+      T.putStrLn $
+        T.intercalate "\n\n" $
+          map (\(_, b) -> ppBudgetComparison b) (Map.toList comparison)
+    _ -> putStrLn "Not a valid budget command"
 
 runReport :: ReportCommandOptions -> IO ()
 runReport ReportCommandOptions {rType, rFilters} = do
