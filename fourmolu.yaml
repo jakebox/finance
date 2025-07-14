@@ -1,5 +1,5 @@
 indentation: 2
-column-limit: 80
+column-limit: 100
 function-arrows: leading
 comma-style: leading
 import-export-style: leading
