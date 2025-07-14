@@ -3,22 +3,27 @@
 {-# HLINT ignore "Redundant lambda" #-}
 {-# HLINT ignore "Eta reduce" #-}
 module Finance.Core
-  (filterTransactions
-  , spendingByCategory 
+  ( filterTransactions
+  , spendingByCategory
   , spendingByPurchaseCategory
   , getSubcategoryBreakdown
   , combinePredicateFilters
   , amountEquals
   , matchesMonth
+  , matchesMonthYear
   , titleInfix
   , identityFilter
   , budgetVersusSpending
   , testBudget
+  , categoryMonthBudgetEfficency
+  , categoryBudgetEfficency
+  , efficiencyToExplanation
   ) where
 
-import Data.Decimal (Decimal)
+import Data.Decimal (Decimal, (*.))
 import Data.List
 import qualified Data.Map.Strict as Map
+import Data.Maybe
 import qualified Data.Text as T
 import Data.Time
 import Data.Time.Calendar.Month
@@ -46,6 +51,10 @@ dateWithin d1 d2 = \t -> txDate t <= d2 && txDate t >= d1
 
 amountEquals :: Decimal -> TransactionFilterP
 amountEquals amt = \t -> txAmount t == amt
+
+matchesMonthYear :: Month -> TransactionFilterP
+matchesMonthYear my = \t -> case toGregorian $ txDate t of
+  (y, m, _) -> YearMonth y m == my
 
 titleInfix :: T.Text -> TransactionFilterP
 titleInfix title = \t -> title `T.isInfixOf` txTitle t
@@ -99,6 +108,42 @@ budgetVersusSpending actualSpendingMap budgetedSpendingMap =
 totalSpending :: [Transaction] -> Decimal
 totalSpending txs = foldl' (\acc tx -> acc + txAmount tx) (0 :: Decimal) txs
 
+{- | Calculate the efficency metric for a single BugetComparison.
+  Based on how far through the month we are and the spending.
+-}
+categoryBudgetEfficency :: DayOfMonth -> BudgetComparison -> Float
+categoryBudgetEfficency today bc = 1 - actual / expected
+  where
+    actual = realToFrac bc.actual
+    expected = realToFrac bc.budgeted * monthPct
+    monthPct = realToFrac today / 30
+
+categoryMonthBudgetEfficency
+  :: Day -> Month -> Map.Map Category BudgetComparison -> Float
+categoryMonthBudgetEfficency today budgetMonth mbc
+  | isPastBudget = 1 - (realToFrac sumSpend / realToFrac sumBudget)
+  | otherwise = 1 - (realToFrac sumSpend / expected)
+  where
+    isPastBudget = budgetMonth < thisMonth
+    (y, m, d) = toGregorian today
+    thisMonth = fromMaybe (MkMonth 100000) $ fromYearMonthValid y m
+    expected = realToFrac sumBudget * (monthPct :: Float)
+    monthPct = fromIntegral d / 30.0
+
+    (sumSpend, sumBudget) = foldl' acc (0, 0) (getBudgetComparisonsFromMap mbc)
+    acc (ss, sb) (bc :: BudgetComparison) = (ss + bc.actual, sb + bc.budgeted)
+
+efficiencyToExplanation :: Float -> String
+efficiencyToExplanation eff
+  | eff < -0.1 = "Overspending"
+  | eff > -0.1 && eff < 0.1 = "On Track"
+  | eff > 0.1 = "Underspending"
+
+-- Budget helper
+getBudgetComparisonsFromMap
+  :: Map.Map Category BudgetComparison -> [BudgetComparison]
+getBudgetComparisonsFromMap bcs = map snd $ Map.toList bcs
+
 ---------------
 -- Refining categories
 ---------------
@@ -146,12 +191,12 @@ transactions =
 
 testBudget =
   Budget
-    (MkMonth 24305)
+    (MkMonth 24306) -- June
     ( Map.fromList
-        [ (categoryFromString "Food", 280.0 :: Decimal)
-        , (categoryFromString "Transport", 250.0 :: Decimal)
+        [ (categoryFromString "Food", 488.0 :: Decimal)
+        , (categoryFromString "Transport", 275.0 :: Decimal)
         , (categoryFromString "Discretionary", 50.0 :: Decimal)
-        , (categoryFromString "Necessities", 35.0 :: Decimal)
-        , (categoryFromString "Social", 25.0 :: Decimal)
+        , (categoryFromString "Necessities", 30.0 :: Decimal)
+        , (categoryFromString "Social", 100.0 :: Decimal)
         ]
     )
