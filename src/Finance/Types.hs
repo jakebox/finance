@@ -13,6 +13,7 @@ module Finance.Types
   , getCategoryText
   ) where
 
+import GHC.Generics
 import Data.Decimal (Decimal)
 import Data.Map.Strict (Map)
 import qualified Data.Text as T
@@ -20,7 +21,7 @@ import Data.Time
 import Data.Time.Calendar.Month
 
 newtype Category = Category T.Text
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic)
 
 getCategoryText :: Category -> T.Text
 getCategoryText (Category txt) = txt
@@ -41,7 +42,7 @@ data Budget = Budget
   { bdDate :: Month
   , bd :: BudgetedAmounts
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 
 data BudgetComparison = BudgetComparison
   { category :: Category

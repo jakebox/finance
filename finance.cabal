@@ -9,14 +9,17 @@ common warnings
         -Wwarn
         -Widentities
         -Wunused-packages
-    default-extensions: ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances, InstanceSigs, OverloadedStrings, OverloadedRecordDot
+    default-extensions: ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances, InstanceSigs, OverloadedStrings, OverloadedRecordDot, DeriveGeneric
 
 library
     import:           warnings
-    exposed-modules:  Finance.Core, Finance.Commands, Finance.Types, Finance.Utils, Finance.Input, Finance.PrettyPrint
+    exposed-modules:  Finance.Core, Finance.Commands, Finance.Types, Finance.Utils, Finance.Input, Finance.PrettyPrint, Finance.ParseBudgetYaml
     build-depends:    base
         , bytestring
+        , aeson
+        , yaml
         , parsec
+        , scientific
         , text
         , time
         , bytestring
