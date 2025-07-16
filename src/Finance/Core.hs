@@ -189,9 +189,8 @@ transactions =
       (categoryFromString "Transport")
   ]
 
-testBudget =
-  Budget
-    (MkMonth 24306) -- June
+testBudget :: BudgetMap = Map.fromList[
+    (MkMonth 24306, -- June
     ( Map.fromList
         [ (categoryFromString "Food", 488.0 :: Decimal)
         , (categoryFromString "Transport", 275.0 :: Decimal)
@@ -199,4 +198,4 @@ testBudget =
         , (categoryFromString "Necessities", 30.0 :: Decimal)
         , (categoryFromString "Social", 100.0 :: Decimal)
         ]
-    )
+    ))]

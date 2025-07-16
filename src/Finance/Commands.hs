@@ -5,6 +5,8 @@ module Finance.Commands (runReport, reportCommandParser, runBudget, budgetComman
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import Data.Maybe
+import Data.Time.Calendar.Month
 import Data.Time
 import Finance.Core
 import Finance.Input
@@ -52,12 +54,12 @@ runBudget BudgetCommandOptions {bAction, bMonth} = do
   txs <- readTransactionFile transactionsFile
   today <- today
   let month = stringToYearMonth bMonth
-      budget = Finance.Core.testBudget
+      budget = fromJust $ Map.lookup (MkMonth 24306) Finance.Core.testBudget
   case bAction of
     "check" -> do
       let filtered_txs = filterTransactions txs (matchesMonthYear month)
-          comparison = budgetVersusSpending (spendingByCategory filtered_txs) budget.bd
-          eff = categoryMonthBudgetEfficency today budget.bdDate comparison
+          comparison = budgetVersusSpending (spendingByCategory filtered_txs) budget
+          eff = categoryMonthBudgetEfficency today (MkMonth 24306) comparison
       printBudgetTable comparison
       printEfficiency "Overall efficency: " eff
     _ -> putStrLn "Not a valid budget command"

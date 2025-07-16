@@ -3,7 +3,7 @@
 module Finance.Types
   ( Category (..)
   , Transaction (..)
-  , Budget (..)
+  , BudgetMap (..)
   , BudgetComparison (..)
   , categoryFromString
   , AggregatedSpending
@@ -38,11 +38,7 @@ data Transaction = Transaction
   }
   deriving (Eq, Show)
 
-data Budget = Budget
-  { bdDate :: Month
-  , bd :: BudgetedAmounts
-  }
-  deriving (Eq, Show, Generic)
+type BudgetMap = Map Month BudgetedAmounts
 
 data BudgetComparison = BudgetComparison
   { category :: Category
