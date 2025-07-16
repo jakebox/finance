@@ -110,11 +110,13 @@ ppTable :: [BudgetComparison] -> T.Text
 ppTable rows =
   let bold = "\ESC[1m"
       reset = "\ESC[0m"
+      sumRow = budgetComparisonSum rows
    in T.unlines $
         [ T.pack $ bold ++ "Category       | Budgeted |  Spent   | Remainder | Spent %" ++ reset
         , "---------------+----------+----------+-----------+-----------"
         ]
           ++ map ppRow rows
+          ++ [T.pack bold <> ppRow sumRow]
 
 -- Entry point
 printBudgetTable :: M.Map Category BudgetComparison -> IO ()

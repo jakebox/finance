@@ -18,6 +18,7 @@ module Finance.Core
   , categoryMonthBudgetEfficency
   , categoryBudgetEfficency
   , efficiencyToExplanation
+  , budgetComparisonSum
   ) where
 
 import Data.Decimal (Decimal, (*.))
@@ -138,6 +139,19 @@ efficiencyToExplanation eff
   | eff < -0.1 = "Overspending"
   | eff > -0.1 && eff < 0.1 = "On Track"
   | eff > 0.1 = "Underspending"
+
+budgetComparisonSum :: [BudgetComparison] -> BudgetComparison
+budgetComparisonSum bcs = foldl' acc (BudgetComparison { category=categoryFromString "Sum",
+                                                        actual=0,
+                                                        budgeted=0,
+                                                        difference=0}) bcs
+  where
+    acc :: BudgetComparison -> BudgetComparison -> BudgetComparison
+    acc sum bc = BudgetComparison { category=sum.category
+                                  , actual=bc.actual + sum.actual
+                                  , budgeted=bc.budgeted + sum.budgeted
+                                  , difference=bc.difference + sum.difference
+                                  }
 
 -- Budget helper
 getBudgetComparisonsFromMap
