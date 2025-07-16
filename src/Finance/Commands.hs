@@ -1,22 +1,23 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use lambda-case" #-}
 
 module Finance.Commands (runReport, reportCommandParser, runBudget, budgetCommandParser, Command (..)) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import Data.Maybe
-import Data.Time.Calendar.Month
 import Data.Time
 import Finance.Core
 import Finance.Input
+import Finance.ParseBudgetYaml
 import Finance.PrettyPrint
 import Finance.Types
-
-import Data.Time (getCurrentTime, toGregorian)
 import Options.Applicative
 
 transactionsFile :: FilePath = "transactions.csv"
+budgetsFile :: FilePath = "budget.yaml"
 
 data Command
   = ReportCommand ReportCommandOptions
@@ -52,17 +53,24 @@ today = getCurrentTimeZone >>= \t -> localDay . utcToLocalTime t <$> getCurrentT
 runBudget :: BudgetCommandOptions -> IO ()
 runBudget BudgetCommandOptions {bAction, bMonth} = do
   txs <- readTransactionFile transactionsFile
+  budgets <-
+    parseBudgetYaml budgetsFile >>= \b -> case b of
+      Left err -> error $ show err
+      Right bud -> return bud
   today <- today
   let month = stringToYearMonth bMonth
-      budget = fromJust $ Map.lookup (MkMonth 24306) Finance.Core.testBudget
-  case bAction of
-    "check" -> do
-      let filtered_txs = filterTransactions txs (matchesMonthYear month)
-          comparison = budgetVersusSpending (spendingByCategory filtered_txs) budget
-          eff = categoryMonthBudgetEfficency today (MkMonth 24306) comparison
-      printBudgetTable comparison
-      printEfficiency "Overall efficency: " eff
-    _ -> putStrLn "Not a valid budget command"
+      maybeBudget = Map.lookup month budgets
+  case maybeBudget of
+    Just budget ->
+      case bAction of
+        "check" -> do
+          let filtered_txs = filterTransactions txs (matchesMonthYear month)
+              comparison = budgetVersusSpending (spendingByCategory filtered_txs) budget
+              eff = categoryMonthBudgetEfficency today month comparison
+          printBudgetTable comparison
+          printEfficiency "Overall efficency: " eff
+        _ -> putStrLn "Not a valid budget command"
+    Nothing -> putStrLn "Could not find a budget for requested month."
 
 runReport :: ReportCommandOptions -> IO ()
 runReport ReportCommandOptions {rType, rFilters} = do
