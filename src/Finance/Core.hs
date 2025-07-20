@@ -1,7 +1,6 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 {-# HLINT ignore "Redundant lambda" #-}
-{-# HLINT ignore "Eta reduce" #-}
 module Finance.Core
   ( filterTransactions
   , spendingByCategory
@@ -14,7 +13,6 @@ module Finance.Core
   , titleInfix
   , identityFilter
   , budgetVersusSpending
-  , testBudget
   , categoryMonthBudgetEfficency
   , categoryBudgetEfficency
   , efficiencyToExplanation
@@ -38,7 +36,7 @@ import Finance.Utils
 -- Filter predicates
 
 identityFilter :: TransactionFilterP
-identityFilter = \t -> True
+identityFilter = const True
 
 matchesDate :: Day -> TransactionFilterP
 matchesDate targetDate = \t -> txDate t == targetDate
@@ -65,7 +63,7 @@ combinePredicateFilters :: [TransactionFilterP] -> TransactionFilterP
 combinePredicateFilters predicates = \transaction -> Prelude.all (\p -> p transaction) predicates
 
 -- Filter a list of transactions
-filterTransactions :: [Transaction] -> (TransactionFilterP) -> [Transaction]
+filterTransactions :: [Transaction] -> TransactionFilterP -> [Transaction]
 filterTransactions txs filters = filter filters txs
 
 ---------------
@@ -84,8 +82,7 @@ spendingByPurchaseCategory = foldl f Map.empty
     f m t = Map.insertWith (+) (txCategory t) (txAmount t) m
 
 getSubcategoryBreakdown :: Category -> AggregatedSpending -> AggregatedSpending
-getSubcategoryBreakdown targetC purchaseSpendingMap =
-  Map.filterWithKey (\c _ -> getBudgetCategory c == targetC) purchaseSpendingMap
+getSubcategoryBreakdown targetC = Map.filterWithKey (\c _ -> getBudgetCategory c == targetC)
 
 -- Compare transaction spending by category and a budget
 budgetVersusSpending
@@ -107,7 +104,7 @@ budgetVersusSpending actualSpendingMap budgetedSpendingMap =
         diff = b - a
 
 totalSpending :: [Transaction] -> Decimal
-totalSpending txs = foldl' (\acc tx -> acc + txAmount tx) (0 :: Decimal) txs
+totalSpending = foldl' (\acc tx -> acc + txAmount tx) (0 :: Decimal)
 
 {- | Calculate the efficency metric for a single BugetComparison.
   Based on how far through the month we are and the spending.
@@ -141,10 +138,10 @@ efficiencyToExplanation eff
   | eff > 0.1 = "Underspending"
 
 budgetComparisonSum :: [BudgetComparison] -> BudgetComparison
-budgetComparisonSum bcs = foldl' acc (BudgetComparison { category=categoryFromString "Sum",
+budgetComparisonSum = foldl' acc (BudgetComparison { category=categoryFromString "Sum",
                                                         actual=0,
                                                         budgeted=0,
-                                                        difference=0}) bcs
+                                                        difference=0})
   where
     acc :: BudgetComparison -> BudgetComparison -> BudgetComparison
     acc sum bc = BudgetComparison { category=sum.category
@@ -175,41 +172,3 @@ categoryMap =
 getBudgetCategory :: Category -> Category
 getBudgetCategory cat = Map.findWithDefault cat cat categoryMap
 
--------------- Test data
-
-testDate1 = case dayFromS "2025-04-10" of
-  Just d -> d
-  Nothing -> error "bad"
-
-testDate2 = case dayFromS "2025-06-10" of
-  Just d -> d
-  Nothing -> error "bad"
-
-transactions =
-  [ Transaction
-      (T.pack "Trader Joes")
-      testDate1
-      (30 :: Decimal)
-      (categoryFromString "Groceries")
-  , Transaction
-      (T.pack "Tacos")
-      testDate2
-      (13.30 :: Decimal)
-      (categoryFromString "CasualMeal")
-  , Transaction
-      (T.pack "Uber")
-      testDate2
-      (26.10 :: Decimal)
-      (categoryFromString "Transport")
-  ]
-
-testBudget :: BudgetMap = Map.fromList[
-    (MkMonth 24306, -- June
-    ( Map.fromList
-        [ (categoryFromString "Food", 488.0 :: Decimal)
-        , (categoryFromString "Transport", 275.0 :: Decimal)
-        , (categoryFromString "Discretionary", 50.0 :: Decimal)
-        , (categoryFromString "Necessities", 30.0 :: Decimal)
-        , (categoryFromString "Social", 100.0 :: Decimal)
-        ]
-    ))]

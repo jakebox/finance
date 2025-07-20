@@ -23,12 +23,12 @@ import Finance.Types
 -}
 ppTransaction :: Transaction -> T.Text
 ppTransaction tx =
-  (T.pack $ show (tx.txAmount))
+  T.pack (show tx.txAmount)
     <> T.pack "-"
     <> txTitle tx
     <> T.pack " | "
-    <> (T.pack $ show (tx.txDate))
-    <> (T.pack $ show (tx.txCategory))
+    <> T.pack (show tx.txDate)
+    <> T.pack (show tx.txCategory)
 
 ppAggregatedSpending :: AggregatedSpending -> T.Text
 ppAggregatedSpending ag
@@ -37,7 +37,7 @@ ppAggregatedSpending ag
   where
     lines = M.foldrWithKey acc [] ag
     categoryPad = 16
-    header = (T.justifyLeft categoryPad ' ' "Category") <> (T.justifyRight 7 ' ' "Amount")
+    header = T.justifyLeft categoryPad ' ' "Category" <> T.justifyRight 7 ' ' "Amount"
     acc :: Category -> Decimal -> [T.Text] -> [T.Text]
     acc cat amt acc_lines =
       let categoryText = getCategoryText cat
@@ -96,7 +96,7 @@ ppRow bc =
   let b = realToFrac bc.budgeted :: Float
       a = realToFrac bc.actual :: Float
       r = realToFrac bc.difference :: Float
-      pct = if b == 0 then 0 else (a / b) * 100
+      pct = if b == 0 then 0 else a / b * 100
    in T.pack $
         printf
           "%-14s | %8.2f | %8.2f | %9.2f | %s"
