@@ -1,11 +1,8 @@
-{-# LANGUAGE NamedFieldPuns #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
-{-# HLINT ignore "Use lambda-case" #-}
-
 module Finance.Commands (runReport, reportCommandParser, runBudget, budgetCommandParser, Command (..)) where
 
+import Data.List
 import qualified Data.Map.Strict as Map
+import Data.Ord
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Time
@@ -54,7 +51,7 @@ runBudget :: BudgetCommandOptions -> IO ()
 runBudget BudgetCommandOptions {bAction, bMonth} = do
   txs <- readTransactionFile transactionsFile
   budgets <-
-    parseBudgetYaml budgetsFile >>= \b -> case b of
+    parseBudgetYaml budgetsFile >>= \case
       Left err -> error $ show err
       Right bud -> return bud
   today <- today
@@ -78,6 +75,7 @@ runReport ReportCommandOptions {rType, rFilters} = do
   let filtered_txs = filterTransactions txs (stringToFilters rFilters)
   case rType of
     "summary" -> T.putStrLn . ppAggregatedSpending $ spendingByCategory filtered_txs
+    "list" -> mapM_ (T.putStrLn . ppTransaction) (sortBy (comparing  $ Down . txAmount) filtered_txs)
     -- "category" ->
     --   case rCategory of
     --     Just category -> print $ subcategories category . spendingByPurchaseCategory $ txs

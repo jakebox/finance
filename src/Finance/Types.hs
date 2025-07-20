@@ -36,7 +36,7 @@ data Transaction = Transaction
   , txCategory :: Category
   , txNote :: T.Text
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 type BudgetMap = Map Month BudgetedAmounts
 

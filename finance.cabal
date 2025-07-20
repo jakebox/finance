@@ -9,35 +9,32 @@ common warnings
         -Wwarn
         -Widentities
         -Wunused-packages
-    default-extensions: ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances, InstanceSigs, OverloadedStrings, OverloadedRecordDot, DeriveGeneric
+    default-extensions: ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances, InstanceSigs, OverloadedStrings, OverloadedRecordDot, DeriveGeneric, LambdaCase, NamedFieldPuns
 
 library
     import:           warnings
     exposed-modules:  Finance.Core, Finance.Commands, Finance.Types, Finance.Utils, Finance.Input, Finance.PrettyPrint, Finance.ParseBudgetYaml
     build-depends:    base
-        , bytestring
+        , Decimal
         , aeson
-        , yaml
+        , bytestring
+        , cassava
+        , containers
+        , optparse-applicative
         , parsec
         , scientific
         , text
         , time
-        , bytestring
-        , containers
-        , optparse-applicative
-        , Decimal
-        , cassava
         , vector
+        , yaml
     hs-source-dirs:   src
     default-language: Haskell2010
 
 executable finance
     import:           warnings
     main-is:          Main.hs
-    build-depends:
-        base
+    build-depends:    base
         , optparse-applicative
         , finance
-
     hs-source-dirs:   exe
     default-language: Haskell2010

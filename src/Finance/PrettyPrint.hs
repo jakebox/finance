@@ -16,19 +16,12 @@ import Text.Printf
 import Finance.Core
 import Finance.Types
 
-{-
-
-\$24.55 - Trader Joe's | 2025-05-26 (Groceries)
-
--}
 ppTransaction :: Transaction -> T.Text
-ppTransaction tx =
-  T.pack (show tx.txAmount)
-    <> T.pack "-"
-    <> txTitle tx
-    <> T.pack " | "
-    <> T.pack (show tx.txDate)
-    <> T.pack (show tx.txCategory)
+ppTransaction tx = T.pack $ printf "%-9s | %-14s | %6.2f — %-22s"
+                   (show tx.txDate)
+                   (getCategoryText tx.txCategory)
+                   (realToFrac tx.txAmount :: Float)
+                   tx.txTitle
 
 ppAggregatedSpending :: AggregatedSpending -> T.Text
 ppAggregatedSpending ag
@@ -45,14 +38,6 @@ ppAggregatedSpending ag
        let newLine = display (getCategoryText cat <> ": ") (T.pack $ show amt)
        in (newLine : acc_lines, amt + sum)
 
-{-
-Discretionary:  $55.43
-Food:          $519.56
-Necessities:    $34.10
-Social:         $37.23
-Transport:     $273.65
--}
-
 ppBudgetComparison :: BudgetComparison -> T.Text
 ppBudgetComparison bc =
   T.intercalate
@@ -67,14 +52,6 @@ ppBudgetComparison bc =
     b = T.justifyRight 6 ' ' $ T.pack $ show bc.budgeted
     a = T.justifyRight 6 ' ' $ T.pack $ show bc.actual
     r = T.justifyRight 6 ' ' $ T.pack $ show bc.difference
-
-{-
-
- Budgeted:  300.00 (b.budgeted)
-    Spent: - 30.00 (b.actual)
-Remainder:  270.00 (b.difference)
-
--}
 
 -- ANSI-colored bar
 spentBar :: Float -> Int -> T.Text
