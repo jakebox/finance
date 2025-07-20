@@ -33,19 +33,17 @@ ppTransaction tx =
 ppAggregatedSpending :: AggregatedSpending -> T.Text
 ppAggregatedSpending ag
   | M.null ag = T.empty
-  | otherwise = T.intercalate "\n" (header : lines)
+  | otherwise = T.intercalate "\n" (("\ESC[1m" <> header <> "\ESC[0m") : (lines ++ [footer]))
   where
-    lines = M.foldrWithKey acc [] ag
-    categoryPad = 16
-    header = T.justifyLeft categoryPad ' ' "Category" <> T.justifyRight 7 ' ' "Amount"
-    acc :: Category -> Decimal -> [T.Text] -> [T.Text]
-    acc cat amt acc_lines =
-      let categoryText = getCategoryText cat
-          amountText = T.pack $ show amt
-          newLine =
-            T.justifyLeft categoryPad ' ' (categoryText <> ": ")
-              <> T.justifyRight 7 ' ' amountText
-       in newLine : acc_lines
+    (lines, total) = M.foldrWithKey acc ([], 0) ag
+
+    display label value = T.justifyLeft 16 ' ' label <> T.justifyRight 7 ' ' value
+    header = display "Category" "Amount"
+    footer = display "Total" (T.pack $ show total)
+
+    acc cat amt (acc_lines, sum) =
+       let newLine = display (getCategoryText cat <> ": ") (T.pack $ show amt)
+       in (newLine : acc_lines, amt + sum)
 
 {-
 Discretionary:  $55.43
