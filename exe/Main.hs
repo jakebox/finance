@@ -22,6 +22,12 @@ mainParser =
               (helper <*> (BudgetCommand <$> budgetCommandParser))
               (progDesc "Budgets")
           )
+        <> command
+          "tx"
+          ( info
+              (helper <*> (TransactionCommand <$> transactionCommandParser))
+              (progDesc "Transactions")
+          )
     )
 
 main :: IO ()
@@ -31,3 +37,4 @@ main = do
   case cmd of
     ReportCommand opts -> runReport opts
     BudgetCommand opts -> runBudget opts
+    TransactionCommand opts -> runTransaction opts

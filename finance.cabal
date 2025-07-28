@@ -20,6 +20,7 @@ library
         , bytestring
         , cassava
         , containers
+        , mtl
         , optparse-applicative
         , parsec
         , scientific

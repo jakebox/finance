@@ -1,5 +1,15 @@
-module Finance.Commands (runReport, reportCommandParser, runBudget, budgetCommandParser, Command (..)) where
+module Finance.Commands
+  ( runReport
+  , reportCommandParser
+  , runBudget
+  , budgetCommandParser
+  , runTransaction
+  , transactionCommandParser
+  , Command (..)
+  ) where
 
+import Control.Monad.Except
+import Control.Monad.IO.Class (liftIO)
 import Data.List
 import qualified Data.Map.Strict as Map
 import Data.Ord
@@ -12,6 +22,7 @@ import Finance.ParseBudgetYaml
 import Finance.PrettyPrint
 import Finance.Types
 import Options.Applicative
+import System.IO
 
 transactionsFile :: FilePath = "transactions.csv"
 budgetsFile :: FilePath = "budget.yaml"
@@ -19,6 +30,7 @@ budgetsFile :: FilePath = "budget.yaml"
 data Command
   = ReportCommand ReportCommandOptions
   | BudgetCommand BudgetCommandOptions
+  | TransactionCommand TransactionCommandOptions
 
 data BudgetCommandOptions = BudgetCommandOptions
   { bAction :: String
@@ -29,6 +41,10 @@ data ReportCommandOptions = ReportCommandOptions
   { rType :: String
   , --  , rCategory :: Maybe String
     rFilters :: Maybe String
+  }
+
+newtype TransactionCommandOptions = TransactionCommandOptions
+  { tType :: String
   }
 
 reportCommandParser :: Parser ReportCommandOptions
@@ -43,6 +59,11 @@ budgetCommandParser =
   BudgetCommandOptions
     <$> argument str (metavar "ACTION")
     <*> argument str (metavar "MONTH")
+
+transactionCommandParser :: Parser TransactionCommandOptions
+transactionCommandParser =
+  TransactionCommandOptions
+    <$> argument str (metavar "COMMAND")
 
 today :: IO Day
 today = getCurrentTimeZone >>= \t -> localDay . utcToLocalTime t <$> getCurrentTime
@@ -69,13 +90,26 @@ runBudget BudgetCommandOptions {bAction, bMonth} = do
         _ -> putStrLn "Not a valid budget command"
     Nothing -> putStrLn "Could not find a budget for requested month."
 
+runTransaction :: TransactionCommandOptions -> IO ()
+runTransaction TransactionCommandOptions {tType} = do
+  case tType of
+    "add" -> do
+      hSetBuffering stdout NoBuffering
+      result <- runExceptT runAddTx
+      case result of
+        Left err -> T.putStrLn "Error on input"
+        Right tx -> do
+          addTxToTransactionFile transactionsFile tx
+          T.putStrLn $ "Added: " <> ppTransaction tx
+    _ -> putStrLn "Not a valid transaction command."
+
 runReport :: ReportCommandOptions -> IO ()
 runReport ReportCommandOptions {rType, rFilters} = do
   txs <- readTransactionFile transactionsFile
   let filtered_txs = filterTransactions txs (stringToFilters rFilters)
   case rType of
     "summary" -> T.putStrLn . ppAggregatedSpending $ spendingByCategory filtered_txs
-    "list" -> mapM_ (T.putStrLn . ppTransaction) (sortBy (comparing  $ Down . txAmount) filtered_txs)
+    "list" -> mapM_ (T.putStrLn . ppTransaction) (sortBy (comparing $ Down . txAmount) filtered_txs)
     -- "category" ->
     --   case rCategory of
     --     Just category -> print $ subcategories category . spendingByPurchaseCategory $ txs

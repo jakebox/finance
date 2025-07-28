@@ -1,12 +1,14 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
-module Finance.Input (readTransactionFile, stringToFilters, stringToYearMonth) where
+module Finance.Input (readTransactionFile, stringToFilters, stringToYearMonth, runAddTx, addTxToTransactionFile) where
 
+import Control.Monad.Except
+import Control.Monad.IO.Class (liftIO)
+import Data.ByteString.Char8 (pack)
 import qualified Data.ByteString.Lazy as BS
 import Data.Csv
 import Data.Decimal
-import Data.Time (Day)
+import Data.Time
 import Data.Time.Calendar (MonthOfYear, Year)
 import Data.Time.Calendar.Month
 import qualified Data.Vector as V
@@ -16,6 +18,7 @@ import Finance.Types
 import Finance.Utils
 
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Options.Applicative (command)
 import Text.Parsec
 import qualified Text.Parsec.String as P (Parser)
@@ -28,15 +31,24 @@ instance FromField Day where
       Just date -> pure date
       Nothing -> error "Bad parse date"
 
+instance ToField Day where
+  toField day = toField (formatTime defaultTimeLocale "%F" day)
+
 instance FromField Category where
   parseField :: Field -> Parser Category
   parseField s = Category <$> parseField s
+
+instance ToField Category where
+  toField = pack . T.unpack . getCategoryText
 
 instance FromField Decimal where
   parseField :: Field -> Parser Decimal
   parseField d = do
     doubleVal :: Float <- parseField d
     pure $ realFracToDecimal 2 doubleVal
+
+instance ToField Decimal where
+    toField = pack . show
 
 instance FromNamedRecord Transaction where
   parseNamedRecord :: NamedRecord -> Parser Transaction
@@ -48,12 +60,61 @@ instance FromNamedRecord Transaction where
       <*> m .: "Category"
       <*> m .: "Note"
 
+instance ToNamedRecord Transaction where
+  toNamedRecord (Transaction txTitle txDate txAmount txCategory txNote) =
+    namedRecord
+      [ "Title" .= txTitle
+      , "Date" .= txDate
+      , "Amount" .= txAmount
+      , "Category" .= txCategory
+      , "Note" .= txNote
+      ]
+
+transactionsHeader :: Header
+transactionsHeader = V.fromList ["Title", "Date", "Amount", "Category", "Note"]
+
 readTransactionFile :: FilePath -> IO [Transaction]
 readTransactionFile fp = do
   csvData <- BS.readFile fp
   case decodeByName csvData of
     Left err -> error err
     Right (_, txs :: V.Vector Transaction) -> pure $ V.toList txs
+
+addTxToTransactionFile :: FilePath -> Transaction -> IO ()
+addTxToTransactionFile fp tx = BS.appendFile fp csvRow
+  where
+    row = toNamedRecord tx
+    csvRow = encodeByNameWith opts transactionsHeader [row]
+    opts =
+      defaultEncodeOptions
+        { encIncludeHeader = False
+        }
+
+runAddTx :: ExceptT ParseError IO Transaction
+runAddTx = do
+  liftIO $ T.putStr "Name: "
+  title <- liftIO T.getLine
+
+  liftIO $ T.putStr "Date: "
+  dateText <- liftIO getLine
+  date <- ExceptT . return $ parse parseDay "input" dateText
+
+  liftIO $ T.putStr "Amount: "
+  amountText <- liftIO getLine
+  amount <- ExceptT . return $ parse parseAmount "input" amountText
+  liftIO $ T.putStr "Category: "
+  categoryText <- liftIO getLine
+  liftIO $ T.putStr "Note: "
+  note <- liftIO T.getLine
+
+  return $
+    Transaction
+      { txTitle= title
+      , txDate = date
+      , txAmount = amount
+      , txCategory = categoryFromString categoryText
+      , txNote = note
+      }
 
 -- --- Parsers
 
@@ -96,6 +157,14 @@ parseYearMonth = do
   case fromYearMonthValid year month of
     Just m -> pure m
     Nothing -> error "bad parse"
+
+parseDay :: P.Parser Day
+parseDay = do
+  dayStr <- many1 (noneOf " \n")
+  case dayFromS dayStr of
+    Just date -> pure date
+    Nothing -> error "Bad parse date"
+
 
 ----------
 
