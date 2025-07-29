@@ -21,6 +21,7 @@ import Finance.Input
 import Finance.ParseBudgetYaml
 import Finance.PrettyPrint
 import Finance.Types
+import Finance.Utils
 import Options.Applicative
 import System.IO
 
@@ -65,9 +66,6 @@ transactionCommandParser =
   TransactionCommandOptions
     <$> argument str (metavar "COMMAND")
 
-today :: IO Day
-today = getCurrentTimeZone >>= \t -> localDay . utcToLocalTime t <$> getCurrentTime
-
 runBudget :: BudgetCommandOptions -> IO ()
 runBudget BudgetCommandOptions {bAction, bMonth} = do
   txs <- readTransactionFile transactionsFile
@@ -76,8 +74,11 @@ runBudget BudgetCommandOptions {bAction, bMonth} = do
       Left err -> error $ show err
       Right bud -> return bud
   today <- today
-  let month = stringToYearMonth bMonth
-      maybeBudget = Map.lookup month budgets
+  monthMaybe <- parseMonthFallbackToThisYear bMonth
+  let month = case monthMaybe of
+                Left err -> error $ show err
+                Right m -> m
+  let  maybeBudget = Map.lookup month budgets
   case maybeBudget of
     Just budget ->
       case bAction of

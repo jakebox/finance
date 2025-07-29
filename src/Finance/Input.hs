@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Finance.Input (readTransactionFile, stringToFilters, stringToYearMonth, runAddTx, addTxToTransactionFile) where
+module Finance.Input (readTransactionFile, stringToFilters, stringToYearMonth, runAddTx, addTxToTransactionFile, parseMonthFallbackToThisYear) where
 
 import Control.Monad.Except
 import Control.Monad.IO.Class (liftIO)
@@ -144,10 +144,10 @@ parseTitleFilter = titleInfix <$> parseTitle
 
 -- Parsing a year/month or month for the budget command
 
-stringToYearMonth :: String -> Month
+stringToYearMonth :: String -> Either ParseError Month
 stringToYearMonth s = case parse parseYearMonth "input" s of
-  Left err -> error $ show err
-  Right m -> m
+  Left err -> Left err
+  Right m -> Right m
 
 parseYearMonth :: P.Parser Month
 parseYearMonth = do
@@ -182,6 +182,17 @@ parseYear = do
   let yearInt :: Integer = read yearStr
   pure yearInt
 
+parseMonthFallbackToThisYear :: String -> IO (Either ParseError Month)
+parseMonthFallbackToThisYear s = case parse parseYearMonth "input" s of
+  Left err -> do
+    case parse parseMonth "input" s of
+      Left err -> return . Left $ err
+      Right m -> do
+         t <- today
+         let (y, _, _) = toGregorian t
+         return . Right $ YearMonth y m
+  Right yrmonth -> return . Right $ yrmonth
+  
 parseMonth :: P.Parser MonthOfYear
 parseMonth = do
   monthStr <- many1 (noneOf " \n")
