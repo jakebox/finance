@@ -33,7 +33,7 @@ mainParser =
 main :: IO ()
 main = do
   cmd <-
-    execParser (info mainParser (fullDesc <> progDesc "Financial Tracker CLI"))
+    execParser (info (mainParser <**> helper) (fullDesc <> progDesc "Financial Tracker CLI"))
   case cmd of
     ReportCommand opts -> runReport opts
     BudgetCommand opts -> runBudget opts
