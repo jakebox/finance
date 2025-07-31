@@ -110,7 +110,7 @@ runReport ReportCommandOptions {rType, rFilters} = do
   let filtered_txs = filterTransactions txs (stringToFilters rFilters)
   case rType of
     "summary" -> T.putStrLn . ppAggregatedSpending $ spendingByCategory filtered_txs
-    "list" -> mapM_ (T.putStrLn . ppTransaction) (sortBy (comparing $ Down . txAmount) filtered_txs)
+    "list" -> mapM_ (T.putStrLn . ppTransaction) (sortBy (comparing txDate) filtered_txs)
     -- "category" ->
     --   case rCategory of
     --     Just category -> print $ subcategories category . spendingByPurchaseCategory $ txs
