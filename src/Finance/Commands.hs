@@ -5,6 +5,8 @@ module Finance.Commands
   , budgetCommandParser
   , runTransaction
   , transactionCommandParser
+  , runTUICommand
+  , tuiCommandParser
   , Command (..)
   ) where
 
@@ -20,6 +22,7 @@ import Finance.Core
 import Finance.Input
 import Finance.ParseBudgetYaml
 import Finance.PrettyPrint
+import Finance.TUI.App (runTUI)
 import Finance.Types
 import Finance.Utils
 import Options.Applicative
@@ -32,6 +35,7 @@ data Command
   = ReportCommand ReportCommandOptions
   | BudgetCommand BudgetCommandOptions
   | TransactionCommand TransactionCommandOptions
+  | TUICommand TUICommandOptions
 
 data BudgetCommandOptions = BudgetCommandOptions
   { bAction :: String
@@ -47,6 +51,8 @@ data ReportCommandOptions = ReportCommandOptions
 newtype TransactionCommandOptions = TransactionCommandOptions
   { tType :: String
   }
+
+data TUICommandOptions = TUICommandOptions
 
 reportCommandParser :: Parser ReportCommandOptions
 reportCommandParser =
@@ -65,6 +71,9 @@ transactionCommandParser :: Parser TransactionCommandOptions
 transactionCommandParser =
   TransactionCommandOptions
     <$> argument str (metavar "COMMAND")
+
+tuiCommandParser :: Parser TUICommandOptions
+tuiCommandParser = pure TUICommandOptions
 
 runBudget :: BudgetCommandOptions -> IO ()
 runBudget BudgetCommandOptions {bAction, bMonth} = do
@@ -118,3 +127,8 @@ runReport ReportCommandOptions {rType, rFilters} = do
     _ -> putStrLn "Not a valid report type"
   where
     subcategories cat = getSubcategoryBreakdown (categoryFromString cat)
+
+runTUICommand :: TUICommandOptions -> IO ()
+runTUICommand TUICommandOptions = do
+  txs <- readTransactionFile transactionsFile
+  runTUI txs

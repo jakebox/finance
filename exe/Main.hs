@@ -28,6 +28,12 @@ mainParser =
               (helper <*> (TransactionCommand <$> transactionCommandParser))
               (progDesc "Transactions")
           )
+        <> command
+          "tui"
+          ( info
+              (helper <*> (TUICommand <$> tuiCommandParser))
+              (progDesc "Launch TUI interface")
+          )
     )
 
 main :: IO ()
@@ -38,3 +44,4 @@ main = do
     ReportCommand opts -> runReport opts
     BudgetCommand opts -> runBudget opts
     TransactionCommand opts -> runTransaction opts
+    TUICommand opts -> runTUICommand opts
