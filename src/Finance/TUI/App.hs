@@ -17,7 +17,8 @@ import Brick.Widgets.List
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class
 import Data.Decimal
-import Data.List (sort)
+import Data.List (sort, sortBy)
+import Data.Ord (comparing)
 import Data.Text qualified as T
 import Data.Time (defaultTimeLocale, formatTime, parseTimeM)
 import Data.Time.Calendar (Day, fromGregorian)
@@ -44,9 +45,12 @@ data TransactionInput = FormState
   }
 makeLenses ''TransactionInput
 
+data SortMode = ByDateUp | ByDateDown | ByAmountUp | ByAmountDown
+
 data St = St
   { _txs :: [Finance.Transaction]
   , _txsList :: List Name Finance.Transaction
+  , _txsSort :: SortMode
   , _form :: Form TransactionInput () Name
   , _focus :: FocusRing Name
   }
@@ -81,7 +85,8 @@ initialState :: [Finance.Transaction] -> St
 initialState txs = St {..}
   where
     _txs = txs
-    _txsList = list Transactions (V.fromList txs) 1
+    _txsList = sortListByDate ByDateDown $ list Transactions (V.fromList txs) 1
+    _txsSort = ByDateDown
     _form = mkForm defaultForm
     _focus = focusRing [Transactions, NameField, DateField, AmountField, NoteField]
 
@@ -113,6 +118,14 @@ drawUI st = [ui]
       where
         style = if selected then withAttr (attrName "selected") else id
 
+sortListByDate :: SortMode -> List Name Finance.Transaction -> List Name Finance.Transaction
+sortListByDate mode = listElementsL %~ (V.fromList . sortBy cmp . V.toList)
+  where
+    cmp :: Finance.Transaction -> Finance.Transaction -> Ordering
+    cmp a b = case mode of
+      ByDateDown -> compare b.txDate a.txDate
+      ByDateUp -> compare a.txDate b.txDate
+
 -- n - resource name type
 -- e - event type
 appEvent :: BrickEvent Name () -> EventM Name St ()
@@ -125,7 +138,16 @@ appEvent ev@(VtyEvent vtyEv) =
     _ -> do
       st <- get
       case focusGetCurrent (st ^. focus) of
-        Just Transactions -> zoom txsList $ handleListEventVi handleListEvent vtyEv
+        Just Transactions -> case vtyEv of
+          Vty.EvKey (Vty.KChar 's') [] -> do
+            st <- get
+            let newMode = case st ^. txsSort of
+                  ByDateUp -> ByDateDown
+                  ByDateDown -> ByDateUp
+            modify (txsSort .~ newMode)
+            let newList = sortListByDate newMode (st ^. txsList)
+            modify (txsList .~ newList)
+          _ -> zoom txsList $ handleListEventVi handleListEvent vtyEv
         Just NameField -> case vtyEv of
           Vty.EvKey Vty.KEnter [] -> do
             let currentForm = st ^. form
