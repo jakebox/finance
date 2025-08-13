@@ -24,6 +24,7 @@ library
         , cassava
         , containers
         , microlens
+        , microlens-th
         , mtl
         , optparse-applicative
         , parsec
