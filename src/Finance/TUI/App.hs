@@ -18,11 +18,13 @@ import Finance.Types
 import Graphics.Vty qualified as Vty
 import Lens.Micro ((^.))
 import Lens.Micro.TH (makeLenses)
+import Data.List (sort)
 
 data Name = Transactions | Budget deriving (Show, Ord, Eq)
 
 data St = St
   { _txs :: [Transaction]
+  , _txsList :: List Name Transaction
   -- , _budget :: BudgetMap
   }
 
@@ -32,6 +34,7 @@ initialState :: [Transaction] -> St
 initialState txs = St {..}
   where
     _txs = txs
+    _txsList = list Transactions (V.fromList txs) 1
 
 -- _budget = undefined
 
@@ -42,21 +45,22 @@ drawUI st = [ui]
       vBox
         [ hCenter $ str "Finance TUI"
         , str " "
-        , vBox [ border $ padLeftRight 1 transactionList]
+        , transactions
         ]
 
-    transactionList = renderList renderTx True txList
-    txList = list Transactions (V.fromList (st ^. txs)) 10
+    transactions = vBox [border $ padLeftRight 1 transactionList]
+    transactionList = renderList renderTx True (st ^. txsList)
     renderTx :: Bool -> Transaction -> Widget Name
     renderTx selected tx =
-      let style = if selected then withAttr (attrName "selected") else id
-       in style $
-            hBox
-              [ padRight (Pad 3) $ str (show $ txDate tx)
-              , hLimit 24 $ padRight Max $ txt (txTitle tx)
-              , hLimit 12 $ padLeft Max $ str ("$" ++ show (txAmount tx))
-              , padLeft (Pad 8) $ txt (let Category cat = txCategory tx in cat)
-              ]
+      style $
+        hBox
+          [ padRight (Pad 3) $ str (show $ txDate tx)
+          , hLimit 24 $ padRight Max $ txt (txTitle tx)
+          , hLimit 12 $ padLeft Max $ str ("$" ++ show (txAmount tx))
+          , padLeft (Pad 8) $ txt (let Category cat = txCategory tx in cat)
+          ]
+      where
+        style = if selected then withAttr (attrName "selected") else id
 
 -- n - resource name type
 -- e - event type
@@ -64,7 +68,8 @@ appEvent :: BrickEvent Name e -> EventM Name St ()
 appEvent (VtyEvent e) =
   case e of
     Vty.EvKey (Vty.KChar 'q') [] -> halt
-    _ -> pure ()
+    Vty.EvKey Vty.KEsc [] -> halt
+    ev -> zoom txsList $ handleListEventVi handleListEvent ev
 appEvent _ = pure ()
 
 finance :: App St e Name
