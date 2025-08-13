@@ -5,6 +5,8 @@ module Finance.Commands
   , budgetCommandParser
   , runTransaction
   , transactionCommandParser
+  , runTUI
+  , tuiCommandParser
   , Command (..)
   ) where
 
@@ -25,6 +27,8 @@ import Finance.Utils
 import Options.Applicative
 import System.IO
 
+import Finance.TUI.App as TUI
+
 transactionsFile :: FilePath = "transactions.csv"
 budgetsFile :: FilePath = "budget.yaml"
 
@@ -32,6 +36,7 @@ data Command
   = ReportCommand ReportCommandOptions
   | BudgetCommand BudgetCommandOptions
   | TransactionCommand TransactionCommandOptions
+  | TUICommand TUICommandOptions
 
 data BudgetCommandOptions = BudgetCommandOptions
   { bAction :: String
@@ -47,6 +52,8 @@ data ReportCommandOptions = ReportCommandOptions
 newtype TransactionCommandOptions = TransactionCommandOptions
   { tType :: String
   }
+
+data TUICommandOptions = TUICommandOptions
 
 reportCommandParser :: Parser ReportCommandOptions
 reportCommandParser =
@@ -66,6 +73,9 @@ transactionCommandParser =
   TransactionCommandOptions
     <$> argument str (metavar "COMMAND")
 
+tuiCommandParser :: Parser TUICommandOptions
+tuiCommandParser = pure TUICommandOptions
+
 runBudget :: BudgetCommandOptions -> IO ()
 runBudget BudgetCommandOptions {bAction, bMonth} = do
   txs <- readTransactionFile transactionsFile
@@ -76,9 +86,9 @@ runBudget BudgetCommandOptions {bAction, bMonth} = do
   today <- today
   monthMaybe <- parseMonthFallbackToThisYear bMonth
   let month = case monthMaybe of
-                Left err -> error $ show err
-                Right m -> m
-  let  maybeBudget = Map.lookup month budgets
+        Left err -> error $ show err
+        Right m -> m
+  let maybeBudget = Map.lookup month budgets
   case maybeBudget of
     Just budget ->
       case bAction of
@@ -118,3 +128,7 @@ runReport ReportCommandOptions {rType, rFilters} = do
     _ -> putStrLn "Not a valid report type"
   where
     subcategories cat = getSubcategoryBreakdown (categoryFromString cat)
+
+runTUI :: TUICommandOptions -> IO ()
+runTUI TUICommandOptions = do
+  TUI.main
