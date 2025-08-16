@@ -17,6 +17,7 @@ import Brick.Widgets.List
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class
 import Data.Decimal
+import Data.Either (fromRight)
 import Data.List (sort, sortBy)
 import Data.Map.Strict qualified as M
 import Data.Maybe (fromJust)
@@ -37,7 +38,7 @@ import Finance.Input
 import Finance.ParseBudgetYaml
 import Finance.Types (txAmount, txCategory, txDate, txNote, txTitle)
 import Finance.Types qualified as Finance
-import Finance.Utils (dayFromS, today)
+import Finance.Utils qualified as Finance (dayFromS, today)
 import Graphics.Vty qualified as Vty
 import Lens.Micro ((%~), (&), (.~), (^.))
 import Lens.Micro.TH (makeLenses)
@@ -67,24 +68,34 @@ data St = St
   , _focus :: FocusRing Name
   , _budgetMonth :: Month
   , _currentBudget :: M.Map Finance.Category Finance.BudgetComparison
+  , _budgets :: Finance.BudgetMap
+  , _today :: Day
   }
 
 makeLenses ''St
 
 initialState
-  :: [Finance.Transaction] -> Month -> M.Map Finance.Category Finance.BudgetComparison -> St
-initialState txs mon bud = St {..}
+  :: [Finance.Transaction] -> Finance.BudgetMap -> Day -> St
+initialState txs budgets today = St {..}
   where
     _txs = txs
     _txsList = sortListByDate ByDateDown $ list Transactions (V.fromList txs) 1
     _txsSort = ByDateDown
-    _form = mkForm defaultForm
+    _form = mkForm $ defaultForm today
     _focus = focusRing [Transactions, NameField, DateField, AmountField, NoteField]
-    _budgetMonth = mon
-    _currentBudget = bud
+    _currentBudget = comparison
+    _budgetMonth = month
+    _budgets = budgets
+    _today = today
 
-defaultForm =
-  FormState {_title = "", _date = fromGregorian 2000 1 1, _amount = 0.0, _category = "", _note = ""}
+    (y, m, _) = toGregorian today
+    month = YearMonth y m
+    budget = fromJust $ M.lookup month budgets
+    comparison =
+      budgetVersusSpending (spendingByCategory (filterTransactions txs (matchesMonthYear month))) budget
+
+defaultForm today =
+  FormState {_title = "", _date = today, _amount = 0.0, _category = "", _note = ""}
 
 mkForm :: TransactionInput -> Form TransactionInput () Name
 mkForm =
@@ -104,7 +115,7 @@ mkForm =
     dateField = editField date DateField (Just 1) toText validate render id
       where
         toText d = T.pack $ show d
-        validate [t] = dayFromS (T.unpack t)
+        validate [t] = Finance.dayFromS (T.unpack t)
         render [t] = txt t
 
 drawUI :: St -> [Widget Name]
@@ -208,7 +219,38 @@ appEvent ev@(VtyEvent vtyEv) =
     _ -> do
       st <- get
       case focusGetCurrent (st ^. focus) of
-        Just Transactions -> case vtyEv of
+        Just NameField -> case vtyEv of
+          Vty.EvKey Vty.KEnter [] -> do
+            let currentForm = st ^. form
+            liftIO $ createTransaction currentForm
+            put $ st {_form = mkForm (defaultForm (st ^. today))}
+          _ -> zoom form $ handleFormEvent ev
+        -- _ -> case vtyEv of
+        _ -> case vtyEv of
+          Vty.EvKey Vty.KLeft [] -> do
+            -- switch budget to the prior month
+            st <- get
+            let
+              newMonth = addMonths (-1) (st ^. budgetMonth)
+              budget = fromJust $ M.lookup newMonth (st ^. budgets)
+              comparison =
+                budgetVersusSpending
+                  (spendingByCategory (filterTransactions (st ^. txs) (matchesMonthYear newMonth)))
+                  budget
+            modify (currentBudget .~ comparison)
+            modify (budgetMonth .~ newMonth)
+          Vty.EvKey Vty.KRight [] -> do
+            -- switch budget to the next month
+            st <- get
+            let
+              newMonth = addMonths 1 (st ^. budgetMonth)
+              budget = fromJust $ M.lookup newMonth (st ^. budgets)
+              comparison =
+                budgetVersusSpending
+                  (spendingByCategory (filterTransactions (st ^. txs) (matchesMonthYear newMonth)))
+                  budget
+            modify (currentBudget .~ comparison)
+            modify (budgetMonth .~ newMonth)
           Vty.EvKey (Vty.KChar 's') [] -> do
             st <- get
             let newMode = case st ^. txsSort of
@@ -218,12 +260,6 @@ appEvent ev@(VtyEvent vtyEv) =
             let newList = sortListByDate newMode (st ^. txsList)
             modify (txsList .~ newList)
           _ -> zoom txsList $ handleListEventVi handleListEvent vtyEv
-        Just NameField -> case vtyEv of
-          Vty.EvKey Vty.KEnter [] -> do
-            let currentForm = st ^. form
-            liftIO $ createTransaction currentForm
-            put $ st {_form = mkForm defaultForm}
-          _ -> zoom form $ handleFormEvent ev
 appEvent _ = pure ()
 
 createTransaction :: Form TransactionInput () Name -> IO ()
@@ -268,20 +304,13 @@ finance = App {..}
 main :: IO ()
 main = do
   txs <- readTransactionFile "transactions.csv"
-  today <- today
+  today <- Finance.today
   budgets <-
     parseBudgetYaml "budget.yaml" >>= \case
       Left err -> error $ show err
       Right bud -> return bud
 
-  let
-    budget = fromJust $ M.lookup month budgets
-    (y, m, _) = toGregorian today
-    month = YearMonth y m
-    filtered_txs = filterTransactions txs (matchesMonthYear month)
-    comparison = budgetVersusSpending (spendingByCategory filtered_txs) budget
-
   let app = finance
-      st = initialState txs month comparison
+      st = initialState txs budgets today
   finalState <- defaultMain app st
   return ()
