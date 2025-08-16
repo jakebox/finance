@@ -18,20 +18,32 @@ import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class
 import Data.Decimal
 import Data.List (sort, sortBy)
+import Data.Map.Strict qualified as M
+import Data.Maybe (fromJust)
 import Data.Ord (comparing)
 import Data.Text qualified as T
 import Data.Time (defaultTimeLocale, formatTime, parseTimeM)
-import Data.Time.Calendar (Day, fromGregorian)
+import Data.Time.Calendar (Day, fromGregorian, toGregorian)
+import Data.Time.Calendar.Month
 import Data.Vector qualified as V
+import Finance.Core
+  ( budgetComparisonSum
+  , budgetVersusSpending
+  , filterTransactions
+  , matchesMonthYear
+  , spendingByCategory
+  )
 import Finance.Input
+import Finance.ParseBudgetYaml
 import Finance.Types (txAmount, txCategory, txDate, txNote, txTitle)
 import Finance.Types qualified as Finance
-import Finance.Utils (dayFromS)
+import Finance.Utils (dayFromS, today)
 import Graphics.Vty qualified as Vty
 import Lens.Micro ((%~), (&), (.~), (^.))
 import Lens.Micro.TH (makeLenses)
 import Lens.Micro.Type (Lens')
 import Text.Parsec
+import Text.Printf (printf)
 
 data Name = Transactions | Budget | NameField | DateField | AmountField | NoteField
   deriving (Show, Ord, Eq)
@@ -53,9 +65,23 @@ data St = St
   , _txsSort :: SortMode
   , _form :: Form TransactionInput () Name
   , _focus :: FocusRing Name
+  , _budgetMonth :: Month
+  , _currentBudget :: M.Map Finance.Category Finance.BudgetComparison
   }
 
 makeLenses ''St
+
+initialState
+  :: [Finance.Transaction] -> Month -> M.Map Finance.Category Finance.BudgetComparison -> St
+initialState txs mon bud = St {..}
+  where
+    _txs = txs
+    _txsList = sortListByDate ByDateDown $ list Transactions (V.fromList txs) 1
+    _txsSort = ByDateDown
+    _form = mkForm defaultForm
+    _focus = focusRing [Transactions, NameField, DateField, AmountField, NoteField]
+    _budgetMonth = mon
+    _currentBudget = bud
 
 defaultForm =
   FormState {_title = "", _date = fromGregorian 2000 1 1, _amount = 0.0, _category = "", _note = ""}
@@ -81,15 +107,6 @@ mkForm =
         validate [t] = dayFromS (T.unpack t)
         render [t] = txt t
 
-initialState :: [Finance.Transaction] -> St
-initialState txs = St {..}
-  where
-    _txs = txs
-    _txsList = sortListByDate ByDateDown $ list Transactions (V.fromList txs) 1
-    _txsSort = ByDateDown
-    _form = mkForm defaultForm
-    _focus = focusRing [Transactions, NameField, DateField, AmountField, NoteField]
-
 drawUI :: St -> [Widget Name]
 drawUI st = [ui]
   where
@@ -98,15 +115,22 @@ drawUI st = [ui]
         [ hCenter $ str "Finance TUI"
         , str " "
         , transactions
+        , budget
         , inputForm
         , infoLine
         ]
 
+    budget = vBox [border . padLeftRight 1 $ budgetHeader <=> budgetDisplay]
+    budgetDisplay = drawBudgetTable (st ^. currentBudget)
+    budgetHeader =
+      (padBottom (Pad 1) . hCenter)
+        (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
     infoLine = str "Press ctrl + : 'q' to quit, 'n' for new item, 'l' for list"
-    inputForm = vBox [border $ padLeftRight 1 (str "Add a new transaction" <=> renderForm (st ^. form))]
-    transactions = vBox [border $ padLeftRight 1 transactionList]
+    inputForm = vBox [border . padLeftRight 1 $ (inputHeader <=> hLimit 50 (renderForm (st ^. form)))]
+    inputHeader = padBottom (Pad 1) (withAttr headingAttr $ str "Add a new transaction")
+    transactions = vBox [border . padLeftRight 1 $ txHeader <=> transactionList]
+    txHeader = (padBottom (Pad 1) . hCenter) (withAttr headingAttr $ str "Recent Transactions")
     transactionList = renderList renderTx True (st ^. txsList)
-    renderTx :: Bool -> Finance.Transaction -> Widget Name
     renderTx selected tx =
       style $
         hBox
@@ -117,6 +141,52 @@ drawUI st = [ui]
           ]
       where
         style = if selected then withAttr (attrName "selected") else id
+
+drawBudgetTable :: M.Map Finance.Category Finance.BudgetComparison -> Widget Name
+drawBudgetTable comparisonMap =
+  let rows = map snd $ M.toList comparisonMap
+      sumRow = (Finance.categoryFromString "TOTAL", budgetComparisonSum rows)
+   in vBox $
+        [ oneLine "Category" "Budgeted" "Spent" "Remainder" (str "Progress")
+        , hBorder
+        ]
+          ++ map drawBudgetRow (M.toList comparisonMap)
+          ++ [ hBorder
+             , drawBudgetRow sumRow
+             ]
+  where
+    oneLine a b c d e =
+      hBox
+        [ hLimit 15 $ padRight Max $ str a
+        , hLimit 10 $ padLeft Max $ str b
+        , hLimit 10 $ padLeft Max $ str c
+        , hLimit 11 $ padLeft Max $ str d
+        , padLeft (Pad 2) e
+        ]
+
+    drawBudgetRow (Finance.Category cat, comparison) =
+      let budgeted = Finance.budgeted comparison
+          actual = Finance.actual comparison
+          remainder = Finance.difference comparison
+          percentage = if budgeted > 0 then (actual / budgeted) * 100 else 0
+          percentageDouble = realToFrac percentage :: Double
+          budgetedStr = printf "%.2f" (realToFrac budgeted :: Double)
+          actualStr = printf "%.2f" (realToFrac actual :: Double)
+          remainderStr = printf "%.2f" (realToFrac remainder :: Double)
+          progressBar = drawProgressBar percentageDouble
+       in oneLine (T.unpack cat) budgetedStr actualStr remainderStr progressBar
+
+drawProgressBar :: Double -> Widget Name
+drawProgressBar percentage =
+  let barWidth = 15
+      filledWidth = max 0 $ min barWidth $ round (percentage * fromIntegral barWidth / 100)
+      emptyWidth = barWidth - filledWidth
+      filled = replicate filledWidth '█'
+      empty = replicate emptyWidth '░'
+      barText = filled ++ empty
+      percentText = printf " %.1f%%" percentage
+      fullText = barText ++ percentText
+   in str fullText
 
 sortListByDate :: SortMode -> List Name Finance.Transaction -> List Name Finance.Transaction
 sortListByDate mode = listElementsL %~ (V.fromList . sortBy cmp . V.toList)
@@ -169,6 +239,9 @@ createTransaction f = addTxToTransactionFile "transactions.csv" tx
         , txNote = values ^. note
         }
 
+headingAttr :: AttrName
+headingAttr = attrName "headingAttr"
+
 finance :: App St () Name
 finance = App {..}
   where
@@ -177,10 +250,9 @@ finance = App {..}
         attrMap
           Vty.defAttr
           [ (attrName "selected", Vty.black `on` Vty.white)
-          , -- , (focusedFormInputAttr, Vty.black `on` Vty.yellow)
-            (invalidFormInputAttr, Vty.white `on` Vty.red)
-          , (E.editAttr, Vty.white `on` Vty.black)
-          -- , (E.editFocusedAttr, Vty.black `on` Vty.yellow)
+          , (headingAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
+          , (invalidFormInputAttr, Vty.white `on` Vty.red)
+          , (E.editAttr, Vty.defAttr `Vty.withStyle` Vty.underline)
           ]
     appDraw = drawUI
     appHandleEvent = appEvent
@@ -192,10 +264,24 @@ finance = App {..}
           Just field -> showCursorNamed field cs
           Nothing -> Nothing
         Nothing -> Nothing
+
 main :: IO ()
 main = do
   txs <- readTransactionFile "transactions.csv"
+  today <- today
+  budgets <-
+    parseBudgetYaml "budget.yaml" >>= \case
+      Left err -> error $ show err
+      Right bud -> return bud
+
+  let
+    budget = fromJust $ M.lookup month budgets
+    (y, m, _) = toGregorian today
+    month = YearMonth y m
+    filtered_txs = filterTransactions txs (matchesMonthYear month)
+    comparison = budgetVersusSpending (spendingByCategory filtered_txs) budget
+
   let app = finance
-      st = initialState txs
+      st = initialState txs month comparison
   finalState <- defaultMain app st
   return ()
