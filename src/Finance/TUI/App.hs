@@ -67,7 +67,7 @@ data St = St
   , _form :: Form TransactionInput () Name
   , _focus :: FocusRing Name
   , _budgetMonth :: Month
-  , _currentBudget :: M.Map Finance.Category Finance.BudgetComparison
+  , _currentBudget :: Maybe (M.Map Finance.Category Finance.BudgetComparison)
   , _budgets :: Finance.BudgetMap
   , _today :: Day
   }
@@ -83,7 +83,7 @@ initialState txs budgets today = St {..}
     _txsSort = ByDateDown
     _form = mkForm $ defaultForm today
     _focus = focusRing [Transactions, NameField, DateField, AmountField, NoteField]
-    _currentBudget = comparison
+    _currentBudget = Just comparison
     _budgetMonth = month
     _budgets = budgets
     _today = today
@@ -153,18 +153,21 @@ drawUI st = [ui]
       where
         style = if selected then withAttr (attrName "selected") else id
 
-drawBudgetTable :: M.Map Finance.Category Finance.BudgetComparison -> Widget Name
-drawBudgetTable comparisonMap =
-  let rows = map snd $ M.toList comparisonMap
-      sumRow = (Finance.categoryFromString "TOTAL", budgetComparisonSum rows)
-   in vBox $
-        [ oneLine "Category" "Budgeted" "Spent" "Remainder" (str "Progress")
-        , hBorder
-        ]
-          ++ map drawBudgetRow (M.toList comparisonMap)
-          ++ [ hBorder
-             , drawBudgetRow sumRow
-             ]
+drawBudgetTable :: Maybe (M.Map Finance.Category Finance.BudgetComparison) -> Widget Name
+drawBudgetTable maybeComparisonMap =
+  case maybeComparisonMap of
+    Just comparisonMap ->
+      let rows = map snd $ M.toList comparisonMap
+          sumRow = (Finance.categoryFromString "TOTAL", budgetComparisonSum rows)
+       in vBox $
+            [ oneLine "Category" "Budgeted" "Spent" "Remainder" (str "Progress")
+            , hBorder
+            ]
+              ++ map drawBudgetRow (M.toList comparisonMap)
+              ++ [ hBorder
+                 , drawBudgetRow sumRow
+                 ]
+    Nothing -> vBox [hCenter $ str "No budget found for this month."]
   where
     oneLine a b c d e =
       hBox
@@ -225,32 +228,9 @@ appEvent ev@(VtyEvent vtyEv) =
             liftIO $ createTransaction currentForm
             put $ st {_form = mkForm (defaultForm (st ^. today))}
           _ -> zoom form $ handleFormEvent ev
-        -- _ -> case vtyEv of
         _ -> case vtyEv of
-          Vty.EvKey Vty.KLeft [] -> do
-            -- switch budget to the prior month
-            st <- get
-            let
-              newMonth = addMonths (-1) (st ^. budgetMonth)
-              budget = fromJust $ M.lookup newMonth (st ^. budgets)
-              comparison =
-                budgetVersusSpending
-                  (spendingByCategory (filterTransactions (st ^. txs) (matchesMonthYear newMonth)))
-                  budget
-            modify (currentBudget .~ comparison)
-            modify (budgetMonth .~ newMonth)
-          Vty.EvKey Vty.KRight [] -> do
-            -- switch budget to the next month
-            st <- get
-            let
-              newMonth = addMonths 1 (st ^. budgetMonth)
-              budget = fromJust $ M.lookup newMonth (st ^. budgets)
-              comparison =
-                budgetVersusSpending
-                  (spendingByCategory (filterTransactions (st ^. txs) (matchesMonthYear newMonth)))
-                  budget
-            modify (currentBudget .~ comparison)
-            modify (budgetMonth .~ newMonth)
+          Vty.EvKey Vty.KLeft [] -> updateBudget (-1)
+          Vty.EvKey Vty.KRight [] -> updateBudget 1
           Vty.EvKey (Vty.KChar 's') [] -> do
             st <- get
             let newMode = case st ^. txsSort of
@@ -260,6 +240,24 @@ appEvent ev@(VtyEvent vtyEv) =
             let newList = sortListByDate newMode (st ^. txsList)
             modify (txsList .~ newList)
           _ -> zoom txsList $ handleListEventVi handleListEvent vtyEv
+  where
+    updateBudget :: Integer -> EventM Name St ()
+    updateBudget dir = do
+      -- switch budget to the next month
+      st <- get
+      let newMonth = addMonths dir (st ^. budgetMonth)
+      case M.lookup newMonth (st ^. budgets) of
+        Just budget -> do
+          let comparison =
+                Just $
+                  budgetVersusSpending
+                    (spendingByCategory (filterTransactions (st ^. txs) (matchesMonthYear newMonth)))
+                    budget
+          modify (currentBudget .~ comparison)
+          modify (budgetMonth .~ newMonth)
+        Nothing -> do
+          modify (currentBudget .~ Nothing)
+          modify (budgetMonth .~ newMonth)
 appEvent _ = pure ()
 
 createTransaction :: Form TransactionInput () Name -> IO ()
