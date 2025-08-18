@@ -36,6 +36,7 @@ import Finance.Core
   )
 import Finance.Input
 import Finance.ParseBudgetYaml
+import Finance.PrettyPrint (ppAggregatedSpending)
 import Finance.Types (txAmount, txCategory, txDate, txNote, txTitle)
 import Finance.Types qualified as Finance
 import Finance.Utils qualified as Finance (dayFromS, today)
@@ -140,7 +141,10 @@ drawUI st = [ui]
         , str " "
         , transactions
         , budget
-        , inputForm
+        , hBox
+            [ inputForm
+            , summary
+            ]
         , infoLine
         ]
 
@@ -165,6 +169,28 @@ drawUI st = [ui]
           ]
       where
         style = if selected then withAttr (attrName "selected") else id
+    summary = hBox [border . padLeftRight 1 $ summaryHeader <=> summaryDetails (st ^. txs)]
+    summaryHeader = padBottom (Pad 1) (withAttr headingAttr $ str "Summary")
+
+summaryDetails :: [Finance.Transaction] -> Widget Name
+summaryDetails txs =
+  vBox
+    [ withAttr boldAttr $ drawLine "Category" "Amount"
+    , vBox (M.foldrWithKey acc [] aggSpending)
+    , drawLine "Total" (show total)
+    ]
+  where
+    aggSpending = spendingByCategory txs
+    total = M.foldr (+) 0 aggSpending
+    acc cat amt acc_widgets =
+      let newWidget = drawLine (T.unpack $ Finance.getCategoryText cat <> ": ") (show amt)
+       in newWidget : acc_widgets
+    drawLine :: String -> String -> Widget Name
+    drawLine label value =
+      hBox
+        [ hLimit 15 $ padRight Max $ str label
+        , hLimit 9 $ padLeft Max $ str value
+        ]
 
 drawBudgetTable :: Maybe (M.Map Finance.Category Finance.BudgetComparison) -> Widget Name
 drawBudgetTable maybeComparisonMap =
@@ -289,6 +315,9 @@ createTransaction f = addTxToTransactionFile "transactions.csv" tx
 headingAttr :: AttrName
 headingAttr = attrName "headingAttr"
 
+boldAttr :: AttrName
+boldAttr = attrName "bold"
+
 finance :: App St () Name
 finance = App {..}
   where
@@ -300,6 +329,7 @@ finance = App {..}
           , (headingAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
           , (invalidFormInputAttr, Vty.white `on` Vty.red)
           , (E.editAttr, Vty.defAttr `Vty.withStyle` Vty.underline)
+          , (boldAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
           ]
     appDraw = drawUI
     appHandleEvent = appEvent
