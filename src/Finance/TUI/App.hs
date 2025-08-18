@@ -46,14 +46,14 @@ import Lens.Micro.Type (Lens')
 import Text.Parsec
 import Text.Printf (printf)
 
-data Name = Transactions | Budget | NameField | DateField | AmountField | NoteField
+data Name = Transactions | Budget | NameField | DateField | AmountField | CategoryField | NoteField
   deriving (Show, Ord, Eq)
 
 data TransactionInput = FormState
   { _title :: T.Text
   , _date :: Day
   , _amount :: Decimal
-  , _category :: T.Text
+  , _category :: Finance.Category
   , _note :: T.Text
   }
 makeLenses ''TransactionInput
@@ -82,7 +82,7 @@ initialState txs budgets today = St {..}
     _txsList = sortListByDate ByDateDown $ list Transactions (V.fromList txs) 1
     _txsSort = ByDateDown
     _form = mkForm $ defaultForm today
-    _focus = focusRing [Transactions, NameField, DateField, AmountField, NoteField]
+    _focus = focusRing [Transactions, NameField, DateField, AmountField, CategoryField, NoteField]
     _currentBudget = Just comparison
     _budgetMonth = month
     _budgets = budgets
@@ -95,15 +95,22 @@ initialState txs budgets today = St {..}
       budgetVersusSpending (spendingByCategory (filterTransactions txs (matchesMonthYear month))) budget
 
 defaultForm today =
-  FormState {_title = "", _date = today, _amount = 0.0, _category = "", _note = ""}
+  FormState
+    { _title = ""
+    , _date = today
+    , _amount = 0.0
+    , _category = Finance.categoryFromString ""
+    , _note = ""
+    }
 
 mkForm :: TransactionInput -> Form TransactionInput () Name
 mkForm =
   newForm
-    [ (str "Title:  " <+>) @@= editTextField title NameField (Just 1)
-    , (str "Date:   " <+>) @@= dateField
-    , (str "Amount: " <+>) @@= amtField
-    , (str "Note:   " <+>) @@= editTextField note NoteField (Just 1)
+    [ (str "Title:    " <+>) @@= editTextField title NameField (Just 1)
+    , (str "Date:     " <+>) @@= dateField
+    , (str "Amount:   " <+>) @@= amtField
+    , (str "Category: " <+>) @@= categoryField
+    , (str "Note:     " <+>) @@= editTextField note NoteField (Just 1)
     ]
   where
     amtField = editField amount AmountField (Just 1) toText validate render id
@@ -116,6 +123,12 @@ mkForm =
       where
         toText d = T.pack $ show d
         validate [t] = Finance.dayFromS (T.unpack t)
+        render [t] = txt t
+
+    categoryField = editField category CategoryField (Just 1) toText validate render id
+      where
+        toText = Finance.getCategoryText
+        validate [t] = Just $ Finance.categoryFromString $ T.unpack t
         render [t] = txt t
 
 drawUI :: St -> [Widget Name]
@@ -269,7 +282,7 @@ createTransaction f = addTxToTransactionFile "transactions.csv" tx
         { txTitle = values ^. title
         , txDate = values ^. date
         , txAmount = values ^. amount
-        , txCategory = Finance.categoryFromString $ T.unpack (values ^. category)
+        , txCategory = values ^. category
         , txNote = values ^. note
         }
 
