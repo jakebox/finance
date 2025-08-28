@@ -80,7 +80,7 @@ initialState
 initialState txs budgets today = St {..}
   where
     _txs = txs
-    _txsList = sortListByDate ByDateDown $ list Transactions (V.fromList txs) 1
+    _txsList = makeTxsList txs
     _txsSort = ByDateDown
     _form = mkForm $ defaultForm today
     _focus = focusRing [Transactions, NameField, DateField, AmountField, CategoryField, NoteField]
@@ -249,6 +249,9 @@ sortListByDate mode = listElementsL %~ (V.fromList . sortBy cmp . V.toList)
       ByDateDown -> compare b.txDate a.txDate
       ByDateUp -> compare a.txDate b.txDate
 
+makeTxsList :: [Finance.Transaction] -> List Name Finance.Transaction
+makeTxsList txs = sortListByDate ByDateDown $ list Transactions (V.fromList txs) 1
+
 -- n - resource name type
 -- e - event type
 appEvent :: BrickEvent Name () -> EventM Name St ()
@@ -264,8 +267,10 @@ appEvent ev@(VtyEvent vtyEv) =
         Just NameField -> case vtyEv of
           Vty.EvKey Vty.KEnter [] -> do
             let currentForm = st ^. form
-            liftIO $ createTransaction currentForm
-            put $ st {_form = mkForm (defaultForm (st ^. today))}
+            newTx <- liftIO $ createTransaction currentForm
+            let newTxs = (st ^. txs) <> [newTx]
+                txsList' = makeTxsList newTxs
+            put $ st {_form = mkForm (defaultForm (st ^. today)), _txs = newTxs, _txsList = txsList'}
           _ -> zoom form $ handleFormEvent ev
         _ -> case vtyEv of
           Vty.EvKey Vty.KLeft [] -> updateBudget (-1)
@@ -299,8 +304,10 @@ appEvent ev@(VtyEvent vtyEv) =
           modify (budgetMonth .~ newMonth)
 appEvent _ = pure ()
 
-createTransaction :: Form TransactionInput () Name -> IO ()
-createTransaction f = addTxToTransactionFile "transactions.csv" tx
+createTransaction :: Form TransactionInput () Name -> IO Finance.Transaction
+createTransaction f = do
+  addTxToTransactionFile "transactions.csv" tx
+  pure tx
   where
     values = formState f
     tx =
