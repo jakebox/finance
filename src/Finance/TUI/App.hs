@@ -137,26 +137,23 @@ drawUI st = [ui]
   where
     ui =
       vBox
-        [ hCenter $ str "Finance TUI"
-        , str " "
+        [ padBottom (Pad 1) $ hCenter $ str "Finance TUI"
         , transactions
-        , budget
         , hBox
-            [ inputForm
-            , summary
+            [ budget
+            , padTopBottom 1 . padLeft (Pad 1) $ summary
             ]
+        , inputForm
         , infoLine
         ]
 
-    budget = vBox [border . padLeftRight 1 $ budgetHeader <=> budgetDisplay]
+    budget = border . padLeftRight 1 $ budgetHeader <=> budgetDisplay
     budgetDisplay = drawBudgetTable (st ^. currentBudget)
-    budgetHeader =
-      (padBottom (Pad 1) . hCenter)
-        (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
+    budgetHeader = padBottom (Pad 1) (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
     infoLine = str "Press ctrl + : 'q' to quit, 'n' for new item, 'l' for list"
-    inputForm = vBox [border . padLeftRight 1 $ (inputHeader <=> hLimit 50 (renderForm (st ^. form)))]
+    inputForm = border . padLeftRight 1 $ (inputHeader <=> hLimit 50 (renderForm (st ^. form)))
     inputHeader = padBottom (Pad 1) (withAttr headingAttr $ str "Add a new transaction")
-    transactions = vBox [border . padLeftRight 1 $ txHeader <=> transactionList]
+    transactions = border . padLeftRight 1 $ txHeader <=> vLimit 15 transactionList
     txHeader = (padBottom (Pad 1) . hCenter) (withAttr headingAttr $ str "Recent Transactions")
     transactionList = renderList renderTx True (st ^. txsList)
     renderTx selected tx =
@@ -169,7 +166,7 @@ drawUI st = [ui]
           ]
       where
         style = if selected then withAttr (attrName "selected") else id
-    summary = hBox [border . padLeftRight 1 $ summaryHeader <=> summaryDetails (st ^. txs)]
+    summary = border . padLeftRight 1 $ summaryHeader <=> summaryDetails (st ^. txs)
     summaryHeader = padBottom (Pad 1) (withAttr headingAttr $ str "Summary")
 
 summaryDetails :: [Finance.Transaction] -> Widget Name
@@ -200,10 +197,10 @@ drawBudgetTable maybeComparisonMap =
           sumRow = (Finance.categoryFromString "TOTAL", budgetComparisonSum rows)
        in vBox $
             [ oneLine "Category" "Budgeted" "Spent" "Remainder" (str "Progress")
-            , hBorder
+            , hLimit 68 hBorder
             ]
               ++ map drawBudgetRow (M.toList comparisonMap)
-              ++ [ hBorder
+              ++ [ hLimit 68 hBorder
                  , drawBudgetRow sumRow
                  ]
     Nothing -> vBox [hCenter $ str "No budget found for this month."]
