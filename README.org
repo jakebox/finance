@@ -1,0 +1,5 @@
+# finance
+
+Budget/spending tracker in Haskell. CLI and TUI (brick) functionality.
+
+[[./screenshot.png]]
