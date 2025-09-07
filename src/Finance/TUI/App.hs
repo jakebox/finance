@@ -147,11 +147,18 @@ drawUI st = [ui]
         , infoLine
         ]
 
-    budget = borderWithLabel (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth)) . padLeftRight 1 $ budgetDisplay
+    budget =
+      borderWithLabel (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
+        . padLeftRight 1
+        $ hLimit 75 (vLimit 9 budgetDisplay)
     budgetDisplay = drawBudgetTable (st ^. currentBudget)
     infoLine = str "Press ctrl + : 'q' to quit, 'n' for new item, 'l' for list"
-    inputForm = borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $ hLimit 50 (renderForm (st ^. form))
-    transactions = borderWithLabel (withAttr headingAttr $ str "Recent Transactions") . padLeftRight 1 $ vLimit 15 transactionList
+    inputForm =
+      borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $
+        hLimit 50 (renderForm (st ^. form))
+    transactions =
+      borderWithLabel (withAttr headingAttr $ str "Recent Transactions") . padLeftRight 1 $
+        vLimit 15 transactionList
     transactionList = renderList renderTx True (st ^. txsList)
     renderTx selected tx =
       style $
@@ -163,7 +170,8 @@ drawUI st = [ui]
           ]
       where
         style = if selected then withAttr (attrName "selected") else id
-    summary = borderWithLabel (withAttr headingAttr $ str "Summary") . padLeftRight 1 $ summaryDetails (st ^. txs)
+    summary =
+      borderWithLabel (withAttr headingAttr $ str "Summary") . padLeftRight 1 $ summaryDetails (st ^. txs)
 
 summaryDetails :: [Finance.Transaction] -> Widget Name
 summaryDetails txs =
@@ -191,22 +199,26 @@ drawBudgetTable maybeComparisonMap =
     Just comparisonMap ->
       let rows = map snd $ M.toList comparisonMap
           sumRow = (Finance.categoryFromString "TOTAL", budgetComparisonSum rows)
-       in vBox $
-            [ oneLine "Category" "Budgeted" "Spent" "Remainder" (str "Progress")
-            , hLimit 68 hBorder
-            ]
-              ++ map drawBudgetRow (M.toList comparisonMap)
-              ++ [ hLimit 68 hBorder
-                 , drawBudgetRow sumRow
-                 ]
-    Nothing -> vBox [hCenter $ str "No budget found for this month."]
+          header =
+            vBox
+              [ oneLine "Category" "Budgeted" "Spent" "Remainder" (str "Progress")
+              , hLimit 71 hBorder
+              ]
+          categoryRows = vBox $ map drawBudgetRow (M.toList comparisonMap)
+          totalSection =
+            vBox
+              [ hLimit 71 hBorder
+              , drawBudgetRow sumRow
+              ]
+       in vBox [header, padBottom Max categoryRows, totalSection]
+    Nothing -> hLimit 71 $ (hCenter $ str "No budget found for this month.") <+> fill ' '
   where
     oneLine a b c d e =
       hBox
         [ hLimit 15 $ padRight Max $ str a
         , hLimit 10 $ padLeft Max $ str b
         , hLimit 10 $ padLeft Max $ str c
-        , hLimit 11 $ padLeft Max $ str d
+        , hLimit 12 $ padLeft Max $ str d
         , padLeft (Pad 2) e
         ]
 
@@ -230,7 +242,7 @@ drawProgressBar percentage =
       filled = replicate filledWidth '█'
       empty = replicate emptyWidth '░'
       barText = filled ++ empty
-      percentText = printf " %.1f%%" percentage
+      percentText = printf "%6.1f%%" percentage
       fullText = barText ++ percentText
    in str fullText
 
