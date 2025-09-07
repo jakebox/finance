@@ -61,7 +61,16 @@ data TransactionInput = FormState
   }
 makeLenses ''TransactionInput
 
-data SortMode = ByDateUp | ByDateDown | ByAmountUp | ByAmountDown
+data SortMode
+  = ByDateUp
+  | ByDateDown
+  | ByAmountUp
+  | ByAmountDown
+  | ByCategoryUp
+  | ByCategoryDown
+  | ByTitleUp
+  | ByTitleDown
+  deriving (Show, Eq)
 
 data St = St
   { _txs :: [Finance.Transaction]
@@ -139,7 +148,7 @@ drawUI st = [ui]
   where
     ui =
       vBox
-        [ padBottom (Pad 1) $ hCenter $ str "Finance TUI"
+        [ padBottom (Pad 1) statusBar
         , transactions
         , hBox
             [ budget
@@ -154,7 +163,8 @@ drawUI st = [ui]
         . padLeftRight 1
         $ hLimit 75 (vLimit 9 budgetDisplay)
     budgetDisplay = drawBudgetTable (st ^. today) (st ^. budgetMonth) (st ^. currentBudget)
-    infoLine = str "Press ctrl + : 'q' to quit, 'n' for new item, 'l' for list"
+    statusBar = drawStatusBar st
+    infoLine = str "Ctrl+Q: quit │ Ctrl+N: new │ Ctrl+L: list │ s/a/c/t: sort │ ←/→: budget month"
     inputForm =
       borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $
         hLimit 50 (renderForm (st ^. form))
@@ -174,6 +184,50 @@ drawUI st = [ui]
         style = if selected then withAttr (attrName "selected") else id
     summary =
       borderWithLabel (withAttr headingAttr $ str "Summary") . padLeftRight 1 $ summaryDetails (st ^. txs)
+
+drawStatusBar :: St -> Widget Name
+drawStatusBar st =
+  let currentFocus = case focusGetCurrent (st ^. focus) of
+        Just Transactions -> "List Mode"
+        Just NameField -> "Form Mode"
+        Just DateField -> "Form Mode"
+        Just AmountField -> "Form Mode"
+        Just CategoryField -> "Form Mode"
+        Just NoteField -> "Form Mode"
+        _ -> "View Mode"
+
+      selectedInfo = case listSelected (st ^. txsList) of
+        Nothing -> "No selection"
+        Just idx -> printf "Transaction %d of %d" (idx + 1) (length (st ^. txs))
+
+      totalAmount = sum $ map txAmount (st ^. txs)
+      totalInfo = printf "Total: $%.2f" (realToFrac totalAmount :: Double)
+
+      sortInfo = case st ^. txsSort of
+        ByDateDown -> "Sort: Date ↓"
+        ByDateUp -> "Sort: Date ↑"
+        ByAmountDown -> "Sort: Amount ↓"
+        ByAmountUp -> "Sort: Amount ↑"
+        ByCategoryDown -> "Sort: Category ↓"
+        ByCategoryUp -> "Sort: Category ↑"
+        ByTitleDown -> "Sort: Title ↓"
+        ByTitleUp -> "Sort: Title ↑"
+
+      efficiency = case st ^. currentBudget of
+        Just comparisonMap ->
+          let eff = categoryMonthBudgetEfficency (st ^. today) (st ^. budgetMonth) comparisonMap
+           in printf "Efficiency: %+.1f%%" (eff * 100)
+        Nothing -> "No Budget"
+
+      leftSection = str $ "Finance TUI │ [" <> currentFocus <> "]"
+      centerSection = str $ selectedInfo <> " │ " <> totalInfo
+      rightSection = str $ sortInfo <> " │ " <> efficiency
+   in withAttr statusBarAttr $
+        hBox
+          [ leftSection
+          , padLeft Max centerSection
+          , padLeft Max rightSection
+          ]
 
 summaryDetails :: [Finance.Transaction] -> Widget Name
 summaryDetails txs =
@@ -195,7 +249,8 @@ summaryDetails txs =
         , hLimit 9 $ padLeft Max $ str value
         ]
 
-drawBudgetTable :: Day -> Month -> Maybe (M.Map Finance.Category Finance.BudgetComparison) -> Widget Name
+drawBudgetTable
+  :: Day -> Month -> Maybe (M.Map Finance.Category Finance.BudgetComparison) -> Widget Name
 drawBudgetTable today budgetMonth maybeComparisonMap =
   case maybeComparisonMap of
     Just comparisonMap ->
@@ -216,7 +271,7 @@ drawBudgetTable today budgetMonth maybeComparisonMap =
               , padTop (Pad 1) $ hCenter $ str efficiencyStr
               ]
        in vBox [header, padBottom Max categoryRows, totalSection]
-    Nothing -> hLimit 71 $ (hCenter $ str "No budget found for this month.") <+> fill ' '
+    Nothing -> hLimit 71 $ hCenter (str "No budget found for this month.") <+> fill ' '
   where
     oneLine a b c d e =
       hBox
@@ -251,16 +306,22 @@ drawProgressBar percentage =
       fullText = barText ++ percentText
    in str fullText
 
-sortListByDate :: SortMode -> List Name Finance.Transaction -> List Name Finance.Transaction
-sortListByDate mode = listElementsL %~ (V.fromList . sortBy cmp . V.toList)
+sortTransactionList :: SortMode -> List Name Finance.Transaction -> List Name Finance.Transaction
+sortTransactionList mode = listElementsL %~ (V.fromList . sortBy cmp . V.toList)
   where
     cmp :: Finance.Transaction -> Finance.Transaction -> Ordering
     cmp a b = case mode of
       ByDateDown -> compare b.txDate a.txDate
       ByDateUp -> compare a.txDate b.txDate
+      ByAmountDown -> compare b.txAmount a.txAmount
+      ByAmountUp -> compare a.txAmount b.txAmount
+      ByCategoryDown -> compare b.txCategory a.txCategory
+      ByCategoryUp -> compare a.txCategory b.txCategory
+      ByTitleDown -> compare b.txTitle a.txTitle
+      ByTitleUp -> compare a.txTitle b.txTitle
 
 makeTxsList :: [Finance.Transaction] -> List Name Finance.Transaction
-makeTxsList txs = sortListByDate ByDateDown $ list Transactions (V.fromList txs) 1
+makeTxsList txs = sortTransactionList ByDateDown $ list Transactions (V.fromList txs) 1
 
 -- n - resource name type
 -- e - event type
@@ -285,16 +346,22 @@ appEvent ev@(VtyEvent vtyEv) =
         _ -> case vtyEv of
           Vty.EvKey Vty.KLeft [] -> updateBudget (-1)
           Vty.EvKey Vty.KRight [] -> updateBudget 1
-          Vty.EvKey (Vty.KChar 's') [] -> do
-            st <- get
-            let newMode = case st ^. txsSort of
-                  ByDateUp -> ByDateDown
-                  ByDateDown -> ByDateUp
-            modify (txsSort .~ newMode)
-            let newList = sortListByDate newMode (st ^. txsList)
-            modify (txsList .~ newList)
+          Vty.EvKey (Vty.KChar 's') [] -> toggleSort ByDateUp ByDateDown
+          Vty.EvKey (Vty.KChar 'a') [] -> toggleSort ByAmountUp ByAmountDown
+          Vty.EvKey (Vty.KChar 'c') [] -> toggleSort ByCategoryUp ByCategoryDown
+          Vty.EvKey (Vty.KChar 't') [] -> toggleSort ByTitleUp ByTitleDown
           _ -> zoom txsList $ handleListEventVi handleListEvent vtyEv
   where
+    toggleSort :: SortMode -> SortMode -> EventM Name St ()
+    toggleSort upMode downMode = do
+      st <- get
+      let newMode = case st ^. txsSort of
+            mode | mode == downMode -> upMode
+            _ -> downMode
+      modify (txsSort .~ newMode)
+      let newList = sortTransactionList newMode (st ^. txsList)
+      modify (txsList .~ newList)
+
     updateBudget :: Integer -> EventM Name St ()
     updateBudget dir = do
       -- switch budget to the next month
@@ -335,6 +402,9 @@ headingAttr = attrName "headingAttr"
 boldAttr :: AttrName
 boldAttr = attrName "bold"
 
+statusBarAttr :: AttrName
+statusBarAttr = attrName "statusbar"
+
 finance :: App St () Name
 finance = App {..}
   where
@@ -347,6 +417,7 @@ finance = App {..}
           , (invalidFormInputAttr, Vty.white `on` Vty.red)
           , (E.editAttr, Vty.defAttr `Vty.withStyle` Vty.underline)
           , (boldAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
+          , (statusBarAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
           ]
     appDraw = drawUI
     appHandleEvent = appEvent
