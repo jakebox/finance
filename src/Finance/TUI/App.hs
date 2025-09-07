@@ -18,12 +18,12 @@ import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class
 import Data.Decimal
 import Data.Either (fromRight)
-import Data.List (sort, sortBy)
+import Data.List (sort, sortBy, transpose)
 import Data.Map.Strict qualified as M
 import Data.Maybe (fromJust)
 import Data.Ord (comparing)
 import Data.Text qualified as T
-import Data.Time (defaultTimeLocale, formatTime, parseTimeM)
+import Data.Time (addDays, defaultTimeLocale, formatTime, parseTimeM)
 import Data.Time.Calendar (Day, fromGregorian, toGregorian)
 import Data.Time.Calendar.Month
 import Data.Vector qualified as V
@@ -149,45 +149,105 @@ drawUI st = [ui]
     ui =
       vBox
         [ padBottom (Pad 1) statusBar
-        , transactions
+        , hBox
+            [ transactions
+            , padLeft (Pad 1) trendsChart
+            ]
         , hBox
             [ budget
-            , padTopBottom 1 . padLeft (Pad 1) $ summary
+            , padLeft (Pad 1) summary
             ]
         , inputForm
         , infoLine
         ]
 
     budget =
-      overrideAttr borderAttr orangeBorderAttr $
-      borderWithLabel (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
-        . padLeftRight 1
-        $ hLimit 75 (vLimit 9 budgetDisplay)
+      overrideAttr borderAttr orangeBorderAttr
+        $ borderWithLabel (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
+          . padLeftRight 1
+        $ hLimit 75 (vLimit 11 budgetDisplay)
     budgetDisplay = drawBudgetTable (st ^. today) (st ^. budgetMonth) (st ^. currentBudget)
     statusBar = drawStatusBar st
-    infoLine = str "Ctrl+Q: quit │ Ctrl+N: new │ Ctrl+L: list │ s/a/c/t: sort │ ←/→: budget month"
+    infoLine = withAttr statusBarAttr $ str "Ctrl+Q: quit │ Ctrl+N: new │ Ctrl+L: list │ s/a/c/t: sort │ ←/→: budget month"
     inputForm =
       overrideAttr borderAttr orangeBorderAttr $
-      borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $
-        hLimit 50 (renderForm (st ^. form))
+        borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $
+          hLimit 50 (renderForm (st ^. form))
     transactions =
       overrideAttr borderAttr orangeBorderAttr $
-      borderWithLabel (withAttr headingAttr $ str "Recent Transactions") . padLeftRight 1 $
-        vLimit 15 transactionList
+        borderWithLabel (withAttr headingAttr $ str "Recent Transactions") . padLeftRight 1 $
+          hLimit 70 $
+            vBox
+              [ transactionHeader
+              , hBorder
+              , vLimit 13 transactionList
+              ]
+    transactionHeader =
+      withAttr boldAttr $
+        hBox
+          [ padRight (Pad 3) $ hLimit 10 $ padRight Max $ str "Date"
+          , hLimit 20 $ padRight Max $ str "Description"
+          , hLimit 12 $ padLeft Max $ str "Amount"
+          , padLeft (Pad 5) $ str "Category"
+          ]
     transactionList = renderList renderTx True (st ^. txsList)
     renderTx selected tx =
       style $
         hBox
           [ padRight (Pad 3) $ str (show $ txDate tx)
-          , hLimit 24 $ padRight Max $ txt (txTitle tx)
+          , hLimit 20 $ padRight Max $ txt (txTitle tx)
           , hLimit 12 $ padLeft Max $ str ("$" ++ show (txAmount tx))
-          , padLeft (Pad 8) $ txt (let Finance.Category cat = txCategory tx in cat)
+          , padLeft (Pad 5) $ txt (let Finance.Category cat = txCategory tx in cat)
           ]
       where
         style = if selected then withAttr (attrName "selected") else id
     summary =
       overrideAttr borderAttr orangeBorderAttr $
-      borderWithLabel (withAttr headingAttr $ str "Summary") . padLeftRight 1 $ summaryDetails (st ^. txs)
+        borderWithLabel (withAttr headingAttr $ str "Summary") . padLeftRight 1 $
+          summaryDetails (st ^. txs)
+
+    trendsChart =
+      overrideAttr borderAttr orangeBorderAttr $
+        borderWithLabel (withAttr headingAttr $ str "7-Day Spending Trend") . padLeftRight 1 $
+          hLimit 30 $
+            drawSpendingChart (st ^. txs) (st ^. today)
+
+drawSpendingChart :: [Finance.Transaction] -> Day -> Widget Name
+drawSpendingChart txs today =
+  let
+    -- Get last 7 days of spending
+    days = [addDays (-i) today | i <- [6, 5, 4, 3, 2, 1, 0]]
+    dailySpending = map (getDaySpending txs) days
+    maxSpending = if null dailySpending then 1 else maximum dailySpending
+
+    -- Create chart bars (height 8)
+    chartHeight = 8
+    bars = map (createBar chartHeight maxSpending) dailySpending
+
+    -- Day labels (show last 2 chars: Mo, Tu, We, etc.)
+    dayLabels = map (take 2 . formatTime defaultTimeLocale "%a") days
+   in
+    vBox
+      [ -- Chart bars from top to bottom
+        vBox $ map hBox $ transpose $ map (map (hLimit 3 . hCenter . str) . Prelude.reverse) bars
+      , hBorder
+      , -- Day labels
+        hBox $ map (\label -> hLimit 3 $ hCenter $ str label) dayLabels
+      , hBorder
+      , -- Values
+        hBox $ map (\amount -> hLimit 3 $ hCenter $ str $ show (truncate amount :: Int)) dailySpending
+      ]
+  where
+    getDaySpending :: [Finance.Transaction] -> Day -> Decimal
+    getDaySpending transactions day =
+      sum [txAmount tx | tx <- transactions, txDate tx == day]
+
+    createBar :: Int -> Decimal -> Decimal -> [String]
+    createBar height maxVal val =
+      let barHeight = if maxVal > 0 then round (realToFrac val * fromIntegral height / realToFrac maxVal) else 0
+          filledChars = replicate barHeight "█"
+          emptyChars = replicate (height - barHeight) " "
+       in filledChars ++ emptyChars
 
 drawStatusBar :: St -> Widget Name
 drawStatusBar st =
@@ -428,7 +488,10 @@ finance = App {..}
           , (E.editAttr, Vty.defAttr `Vty.withStyle` Vty.underline)
           , (boldAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
           , (statusBarAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
-          , (orangeBorderAttr, Vty.defAttr `Vty.withForeColor` Vty.rgbColor (255 :: Int) (165 :: Int) (0 :: Int))
+          ,
+            ( orangeBorderAttr
+            , Vty.defAttr `Vty.withForeColor` Vty.rgbColor (255 :: Int) (165 :: Int) (0 :: Int)
+            )
           , (italicAttr, Vty.defAttr `Vty.withStyle` Vty.italic)
           ]
     appDraw = drawUI
