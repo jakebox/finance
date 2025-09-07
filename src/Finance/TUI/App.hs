@@ -159,6 +159,7 @@ drawUI st = [ui]
         ]
 
     budget =
+      overrideAttr borderAttr orangeBorderAttr $
       borderWithLabel (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
         . padLeftRight 1
         $ hLimit 75 (vLimit 9 budgetDisplay)
@@ -166,9 +167,11 @@ drawUI st = [ui]
     statusBar = drawStatusBar st
     infoLine = str "Ctrl+Q: quit │ Ctrl+N: new │ Ctrl+L: list │ s/a/c/t: sort │ ←/→: budget month"
     inputForm =
+      overrideAttr borderAttr orangeBorderAttr $
       borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $
         hLimit 50 (renderForm (st ^. form))
     transactions =
+      overrideAttr borderAttr orangeBorderAttr $
       borderWithLabel (withAttr headingAttr $ str "Recent Transactions") . padLeftRight 1 $
         vLimit 15 transactionList
     transactionList = renderList renderTx True (st ^. txsList)
@@ -183,6 +186,7 @@ drawUI st = [ui]
       where
         style = if selected then withAttr (attrName "selected") else id
     summary =
+      overrideAttr borderAttr orangeBorderAttr $
       borderWithLabel (withAttr headingAttr $ str "Summary") . padLeftRight 1 $ summaryDetails (st ^. txs)
 
 drawStatusBar :: St -> Widget Name
@@ -220,7 +224,7 @@ drawStatusBar st =
         Nothing -> "No Budget"
 
       leftSection = str $ "Finance TUI │ [" <> currentFocus <> "]"
-      centerSection = str $ selectedInfo <> " │ " <> totalInfo
+      centerSection = hBox [str $ selectedInfo <> " │ ", withAttr boldAttr $ str totalInfo]
       rightSection = str $ sortInfo <> " │ " <> efficiency
    in withAttr statusBarAttr $
         hBox
@@ -234,7 +238,7 @@ summaryDetails txs =
   vBox
     [ withAttr boldAttr $ drawLine "Category" "Amount"
     , vBox (M.foldrWithKey acc [] aggSpending)
-    , drawLine "Total" (show total)
+    , withAttr boldAttr $ drawLine "Total" (show total)
     ]
   where
     aggSpending = spendingByCategory txs
@@ -268,7 +272,7 @@ drawBudgetTable today budgetMonth maybeComparisonMap =
             vBox
               [ hLimit 71 hBorder
               , drawBudgetRow sumRow
-              , padTop (Pad 1) $ hCenter $ str efficiencyStr
+              , padTop (Pad 1) $ hCenter $ withAttr italicAttr $ str efficiencyStr
               ]
        in vBox [header, padBottom Max categoryRows, totalSection]
     Nothing -> hLimit 71 $ hCenter (str "No budget found for this month.") <+> fill ' '
@@ -405,6 +409,12 @@ boldAttr = attrName "bold"
 statusBarAttr :: AttrName
 statusBarAttr = attrName "statusbar"
 
+orangeBorderAttr :: AttrName
+orangeBorderAttr = attrName "orangeBorder"
+
+italicAttr :: AttrName
+italicAttr = attrName "italic"
+
 finance :: App St () Name
 finance = App {..}
   where
@@ -418,6 +428,8 @@ finance = App {..}
           , (E.editAttr, Vty.defAttr `Vty.withStyle` Vty.underline)
           , (boldAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
           , (statusBarAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
+          , (orangeBorderAttr, Vty.defAttr `Vty.withForeColor` Vty.rgbColor (255 :: Int) (165 :: Int) (0 :: Int))
+          , (italicAttr, Vty.defAttr `Vty.withStyle` Vty.italic)
           ]
     appDraw = drawUI
     appHandleEvent = appEvent
