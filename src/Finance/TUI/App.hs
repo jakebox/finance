@@ -147,14 +147,11 @@ drawUI st = [ui]
         , infoLine
         ]
 
-    budget = border . padLeftRight 1 $ budgetHeader <=> budgetDisplay
+    budget = borderWithLabel (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth)) . padLeftRight 1 $ budgetDisplay
     budgetDisplay = drawBudgetTable (st ^. currentBudget)
-    budgetHeader = padBottom (Pad 1) (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
     infoLine = str "Press ctrl + : 'q' to quit, 'n' for new item, 'l' for list"
-    inputForm = border . padLeftRight 1 $ (inputHeader <=> hLimit 50 (renderForm (st ^. form)))
-    inputHeader = padBottom (Pad 1) (withAttr headingAttr $ str "Add a new transaction")
-    transactions = border . padLeftRight 1 $ txHeader <=> vLimit 15 transactionList
-    txHeader = (padBottom (Pad 1) . hCenter) (withAttr headingAttr $ str "Recent Transactions")
+    inputForm = borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $ hLimit 50 (renderForm (st ^. form))
+    transactions = borderWithLabel (withAttr headingAttr $ str "Recent Transactions") . padLeftRight 1 $ vLimit 15 transactionList
     transactionList = renderList renderTx True (st ^. txsList)
     renderTx selected tx =
       style $
@@ -166,8 +163,7 @@ drawUI st = [ui]
           ]
       where
         style = if selected then withAttr (attrName "selected") else id
-    summary = border . padLeftRight 1 $ summaryHeader <=> summaryDetails (st ^. txs)
-    summaryHeader = padBottom (Pad 1) (withAttr headingAttr $ str "Summary")
+    summary = borderWithLabel (withAttr headingAttr $ str "Summary") . padLeftRight 1 $ summaryDetails (st ^. txs)
 
 summaryDetails :: [Finance.Transaction] -> Widget Name
 summaryDetails txs =
