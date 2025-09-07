@@ -30,6 +30,8 @@ import Data.Vector qualified as V
 import Finance.Core
   ( budgetComparisonSum
   , budgetVersusSpending
+  , categoryMonthBudgetEfficency
+  , efficiencyToExplanation
   , filterTransactions
   , matchesMonthYear
   , spendingByCategory
@@ -151,7 +153,7 @@ drawUI st = [ui]
       borderWithLabel (withAttr headingAttr $ str $ "Budget for " <> show (st ^. budgetMonth))
         . padLeftRight 1
         $ hLimit 75 (vLimit 9 budgetDisplay)
-    budgetDisplay = drawBudgetTable (st ^. currentBudget)
+    budgetDisplay = drawBudgetTable (st ^. today) (st ^. budgetMonth) (st ^. currentBudget)
     infoLine = str "Press ctrl + : 'q' to quit, 'n' for new item, 'l' for list"
     inputForm =
       borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $
@@ -193,12 +195,14 @@ summaryDetails txs =
         , hLimit 9 $ padLeft Max $ str value
         ]
 
-drawBudgetTable :: Maybe (M.Map Finance.Category Finance.BudgetComparison) -> Widget Name
-drawBudgetTable maybeComparisonMap =
+drawBudgetTable :: Day -> Month -> Maybe (M.Map Finance.Category Finance.BudgetComparison) -> Widget Name
+drawBudgetTable today budgetMonth maybeComparisonMap =
   case maybeComparisonMap of
     Just comparisonMap ->
       let rows = map snd $ M.toList comparisonMap
           sumRow = (Finance.categoryFromString "TOTAL", budgetComparisonSum rows)
+          efficiency = categoryMonthBudgetEfficency today budgetMonth comparisonMap
+          efficiencyStr = printf "Overall efficiency: %+.1f%% (%s)" (efficiency * 100) (efficiencyToExplanation efficiency)
           header =
             vBox
               [ oneLine "Category" "Budgeted" "Spent" "Remainder" (str "Progress")
@@ -209,6 +213,7 @@ drawBudgetTable maybeComparisonMap =
             vBox
               [ hLimit 71 hBorder
               , drawBudgetRow sumRow
+              , padTop (Pad 1) $ hCenter $ str efficiencyStr
               ]
        in vBox [header, padBottom Max categoryRows, totalSection]
     Nothing -> hLimit 71 $ (hCenter $ str "No budget found for this month.") <+> fill ' '
