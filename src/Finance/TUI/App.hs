@@ -168,10 +168,10 @@ drawUI st = [ui]
         $ hLimit 75 (vLimit 11 budgetDisplay)
     budgetDisplay = drawBudgetTable (st ^. today) (st ^. budgetMonth) (st ^. currentBudget)
     statusBar = drawStatusBar st
-    infoLine = withAttr statusBarAttr $ str "Ctrl+Q: quit │ Ctrl+N: new │ Ctrl+L: list │ s/a/c/t: sort │ ←/→: budget month"
+    infoLine = withAttr statusBarAttr $ str "^q: quit │ n: new │ ^l: list │ s/a/c/t: sort │ ←/→: budget month"
     inputForm =
       overrideAttr borderAttr orangeBorderAttr $
-        borderWithLabel (withAttr headingAttr $ str "Add a new transaction") . padLeftRight 1 $
+        borderWithLabel (withAttr headingAttr $ str "Add a new transaction [n]") . padLeftRight 1 $
           hLimit 50 (renderForm (st ^. form))
     transactions =
       overrideAttr borderAttr orangeBorderAttr $
@@ -393,7 +393,6 @@ appEvent :: BrickEvent Name () -> EventM Name St ()
 appEvent ev@(VtyEvent vtyEv) =
   case vtyEv of
     Vty.EvKey (Vty.KChar 'l') [Vty.MCtrl] -> modify (focus %~ focusSetCurrent Transactions)
-    Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl] -> modify (focus %~ focusSetCurrent NameField)
     Vty.EvKey (Vty.KChar 'q') [Vty.MCtrl] -> halt
     Vty.EvKey Vty.KEsc [] -> halt
     _ -> do
@@ -410,6 +409,7 @@ appEvent ev@(VtyEvent vtyEv) =
         _ -> case vtyEv of
           Vty.EvKey Vty.KLeft [] -> updateBudget (-1)
           Vty.EvKey Vty.KRight [] -> updateBudget 1
+          Vty.EvKey (Vty.KChar 'n') [] -> modify (focus %~ focusSetCurrent NameField)
           Vty.EvKey (Vty.KChar 's') [] -> toggleSort ByDateUp ByDateDown
           Vty.EvKey (Vty.KChar 'a') [] -> toggleSort ByAmountUp ByAmountDown
           Vty.EvKey (Vty.KChar 'c') [] -> toggleSort ByCategoryUp ByCategoryDown
