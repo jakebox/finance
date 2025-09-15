@@ -176,7 +176,7 @@ drawUI st = [ui]
     transactions =
       overrideAttr borderAttr orangeBorderAttr $
         borderWithLabel (withAttr headingAttr $ str "Recent Transactions") . padLeftRight 1 $
-          hLimit 70 $
+          hLimit 75 $
             vBox
               [ transactionHeader
               , hBorder
