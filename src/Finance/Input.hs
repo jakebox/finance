@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Finance.Input (readTransactionFile, stringToFilters, stringToYearMonth, runAddTx, addTxToTransactionFile, parseMonthFallbackToThisYear) where
+module Finance.Input (readTransactionFile, stringToFilters, stringToYearMonth, runAddTx, addTxToTransactionFile, parseMonthFallbackToThisYear, parseAmount) where
 
 import Control.Monad.Except
 import Control.Monad.IO.Class (liftIO)

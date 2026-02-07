@@ -39,7 +39,7 @@ import Finance.Core
 import Finance.Input
 import Finance.ParseBudgetYaml
 import Finance.PrettyPrint (ppAggregatedSpending)
-import Finance.Types (txAmount, txCategory, txDate, txNote, txTitle, unTxTitle, mkTxTitle, TxTitle)
+import Finance.Types (TxTitle, mkTxTitle, txAmount, txCategory, txDate, txNote, txTitle, unTxTitle)
 import Finance.Types qualified as Finance
 import Finance.Utils qualified as Finance (dayFromS, today)
 import Graphics.Vty qualified as Vty
@@ -55,7 +55,7 @@ data Name = Transactions | Budget | NameField | DateField | AmountField | Catego
 data TransactionInput = FormState
   { _title :: T.Text
   , _date :: Day
-  , _amount :: Decimal
+  , _amount :: T.Text
   , _category :: Finance.Category
   , _note :: T.Text
   }
@@ -113,7 +113,7 @@ defaultForm today =
   FormState
     { _title = ""
     , _date = today
-    , _amount = 0.0
+    , _amount = ""
     , _category = Finance.categoryFromString ""
     , _note = ""
     }
@@ -128,25 +128,20 @@ mkForm =
     , (str "Note:     " <+>) @@= editTextField note NoteField (Just 1)
     ]
   where
-    -- titleField = editField title NameField (Just 1) toText validate render id
-    --   where
-    --     toText t = unTxTitle t
-    --     validate [t] = case mkTxTitle t of
-    --                      Left err -> Nothing
-    --                      Right t -> Just t
-    --     render [t] = txt t
     titleField = editField title NameField (Just 1) id validate render id
       where
         render [t] = txt t
         validate [t] = case mkTxTitle t of
-                         Left _  -> Nothing -- Brick marks field invalid
-                         Right _ -> Just t  -- Returns the text if valid
-        validate _   = Nothing
+          Left _ -> Nothing
+          Right _ -> Just t
+        validate _ = Nothing
 
-    amtField = editField amount AmountField (Just 1) toText validate render id
+    amtField = editField amount AmountField (Just 1) id validate render id
       where
         toText d = T.pack $ show d
-        validate [t] = Just (realFracToDecimal 2 (read $ T.unpack t))
+        validate [t] = case parse parseAmount "input" (T.unpack t) of
+          Left _ -> Nothing
+          Right _ -> Just t
         render [t] = txt t
 
     dateField = editField date DateField (Just 1) toText validate render id
@@ -158,7 +153,10 @@ mkForm =
     categoryField = editField category CategoryField (Just 1) toText validate render id
       where
         toText = Finance.getCategoryText
-        validate [t] = Just $ Finance.categoryFromString $ T.unpack t
+        validate [t] =
+          if T.length t < 1
+            then Nothing
+            else Just $ Finance.categoryFromString $ T.unpack t
         render [t] = txt t
 
 drawUI :: St -> [Widget Name]
@@ -425,7 +423,7 @@ appEvent ev@(VtyEvent vtyEv) =
                 let newTxs = (st ^. txs) <> [newTx]
                     txsList' = makeTxsList newTxs
                 put $ st {_form = mkForm (defaultForm (st ^. today)), _txs = newTxs, _txsList = txsList'}
-               else
+              else
                 continueWithoutRedraw
           _ -> zoom form $ handleFormEvent ev
         _ -> case vtyEv of
@@ -477,7 +475,8 @@ createTransaction f = do
       Finance.Transaction
         { txTitle = fromRight (error "Validated") $ mkTxTitle (values ^. title)
         , txDate = values ^. date
-        , txAmount = values ^. amount
+        , txAmount =
+            fromRight (error "Validated?") $ parse parseAmount "input" (T.unpack $ (values ^. amount))
         , txCategory = values ^. category
         , txNote = values ^. note
         }
