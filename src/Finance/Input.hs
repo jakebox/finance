@@ -22,6 +22,8 @@ import qualified Data.Text.IO as T
 import Options.Applicative (command)
 import Text.Parsec
 import qualified Text.Parsec.String as P (Parser)
+import Options.Applicative.Arrows (ArrowChoice(left))
+import Data.Bifunctor (first)
 
 instance FromField Day where
   parseField :: Field -> Parser Day
@@ -33,6 +35,18 @@ instance FromField Day where
 
 instance ToField Day where
   toField day = toField (formatTime defaultTimeLocale "%F" day)
+
+-- FIXME
+instance FromField TxTitle where
+  parseField :: Field -> Parser TxTitle
+  parseField f = do
+    tt <- parseField f
+    case mkTxTitle tt of
+      Left x -> error (show x)
+      Right t -> pure t
+
+instance ToField TxTitle where
+  toField = toField . unTxTitle
 
 instance FromField Category where
   parseField :: Field -> Parser Category
@@ -90,18 +104,19 @@ addTxToTransactionFile fp tx = BS.appendFile fp csvRow
         { encIncludeHeader = False
         }
 
-runAddTx :: ExceptT ParseError IO Transaction
+runAddTx :: ExceptT String IO Transaction
 runAddTx = do
   liftIO $ T.putStr "Name: "
-  title <- liftIO T.getLine
+  titleText <- liftIO getLine
+  title <- ExceptT . return $ first show $ parse parseTitle "input" titleText
 
   liftIO $ T.putStr "Date: "
   dateText <- liftIO getLine
-  date <- ExceptT . return $ parse parseDay "input" dateText
+  date <- ExceptT . return $ first show $ parse parseDay "input" dateText
 
   liftIO $ T.putStr "Amount: "
   amountText <- liftIO getLine
-  amount <- ExceptT . return $ parse parseAmount "input" amountText
+  amount <- ExceptT . return $ first show $ parse parseAmount "input" amountText
   liftIO $ T.putStr "Category: "
   categoryText <- liftIO getLine
   liftIO $ T.putStr "Note: "
@@ -200,8 +215,12 @@ parseMonth = do
     Just m -> pure m
     Nothing -> fail "Not a month"
 
-parseTitle :: P.Parser T.Text
-parseTitle = T.pack <$> many1 (noneOf " \n")
+parseTitle :: P.Parser TxTitle
+parseTitle = do
+  tTxt <- T.pack <$> many1 (noneOf " \n")
+  case mkTxTitle tTxt of
+    Left err -> fail err
+    Right t -> pure t
 
 arbitraryMonToMonth :: String -> Maybe MonthOfYear
 arbitraryMonToMonth s

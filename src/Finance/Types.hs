@@ -11,14 +11,17 @@ module Finance.Types
   , Filter
   , TransactionFilterP
   , getCategoryText
+  , TxTitle (..)
+  , mkTxTitle
+  , unTxTitle
   ) where
 
-import GHC.Generics
 import Data.Decimal (Decimal)
 import Data.Map.Strict (Map)
 import qualified Data.Text as T
 import Data.Time
 import Data.Time.Calendar.Month
+import GHC.Generics
 
 newtype Category = Category T.Text
   deriving (Eq, Ord, Show, Generic)
@@ -29,8 +32,19 @@ getCategoryText (Category txt) = txt
 categoryFromString :: String -> Category
 categoryFromString s = Category $ T.pack s
 
+newtype TxTitle = TxTitle T.Text
+  deriving (Eq, Show, Ord)
+
+mkTxTitle :: T.Text -> Either String TxTitle
+mkTxTitle t
+  | T.null (T.strip t) = Left "Transaction title cannot be empty"
+  | otherwise = Right (TxTitle t)
+
+unTxTitle :: TxTitle -> T.Text
+unTxTitle (TxTitle t) = t
+
 data Transaction = Transaction
-  { txTitle :: T.Text
+  { txTitle :: TxTitle
   , txDate :: Day
   , txAmount :: Decimal
   , txCategory :: Category

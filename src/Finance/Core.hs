@@ -55,8 +55,8 @@ matchesMonthYear :: Month -> TransactionFilterP
 matchesMonthYear my = \t -> case toGregorian $ txDate t of
   (y, m, _) -> YearMonth y m == my
 
-titleInfix :: T.Text -> TransactionFilterP
-titleInfix title = \t -> title `T.isInfixOf` txTitle t
+titleInfix :: TxTitle -> TransactionFilterP
+titleInfix title = \t -> (unTxTitle title) `T.isInfixOf` (unTxTitle $ txTitle t)
 
 -- Combine predicates to a single predicate
 combinePredicateFilters :: [TransactionFilterP] -> TransactionFilterP
@@ -135,7 +135,8 @@ efficiencyToExplanation :: Float -> String
 efficiencyToExplanation eff
   | eff < -0.1 = "Overspending"
   | eff > -0.1 && eff < 0.1 = "On Track"
-  | eff > 0.1 = "Underspending"
+  -- | eff > 0.1 = "Underspending"
+  | otherwise = "Underspending"
 
 budgetComparisonSum :: [BudgetComparison] -> BudgetComparison
 budgetComparisonSum = foldl' acc (BudgetComparison { category=categoryFromString "Sum",

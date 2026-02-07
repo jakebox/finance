@@ -20,7 +20,7 @@ import Data.Decimal
 import Data.Either (fromRight)
 import Data.List (sort, sortBy, transpose)
 import Data.Map.Strict qualified as M
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Ord (comparing)
 import Data.Text qualified as T
 import Data.Time (addDays, defaultTimeLocale, formatTime, parseTimeM)
@@ -39,7 +39,7 @@ import Finance.Core
 import Finance.Input
 import Finance.ParseBudgetYaml
 import Finance.PrettyPrint (ppAggregatedSpending)
-import Finance.Types (txAmount, txCategory, txDate, txNote, txTitle)
+import Finance.Types (txAmount, txCategory, txDate, txNote, txTitle, unTxTitle, mkTxTitle, TxTitle)
 import Finance.Types qualified as Finance
 import Finance.Utils qualified as Finance (dayFromS, today)
 import Graphics.Vty qualified as Vty
@@ -95,16 +95,19 @@ initialState txs budgets today = St {..}
     _txsSort = ByDateDown
     _form = mkForm $ defaultForm today
     _focus = focusRing [Transactions, NameField, DateField, AmountField, CategoryField, NoteField]
-    _currentBudget = Just comparison
+    _currentBudget = comparison
     _budgetMonth = month
     _budgets = budgets
     _today = today
 
     (y, m, _) = toGregorian today
     month = YearMonth y m
-    budget = fromJust $ M.lookup month budgets
-    comparison =
-      budgetVersusSpending (spendingByCategory (filterTransactions txs (matchesMonthYear month))) budget
+    budget = M.lookup month budgets
+    comparison = case budget of
+      Nothing -> Nothing
+      Just b -> Just $ budgetVersusSpending actualSpending b
+      where
+        actualSpending = (spendingByCategory (filterTransactions txs (matchesMonthYear month)))
 
 defaultForm today =
   FormState
@@ -118,13 +121,28 @@ defaultForm today =
 mkForm :: TransactionInput -> Form TransactionInput () Name
 mkForm =
   newForm
-    [ (str "Title:    " <+>) @@= editTextField title NameField (Just 1)
+    [ (str "Title:    " <+>) @@= titleField
     , (str "Date:     " <+>) @@= dateField
     , (str "Amount:   " <+>) @@= amtField
     , (str "Category: " <+>) @@= categoryField
     , (str "Note:     " <+>) @@= editTextField note NoteField (Just 1)
     ]
   where
+    -- titleField = editField title NameField (Just 1) toText validate render id
+    --   where
+    --     toText t = unTxTitle t
+    --     validate [t] = case mkTxTitle t of
+    --                      Left err -> Nothing
+    --                      Right t -> Just t
+    --     render [t] = txt t
+    titleField = editField title NameField (Just 1) id validate render id
+      where
+        render [t] = txt t
+        validate [t] = case mkTxTitle t of
+                         Left _  -> Nothing -- Brick marks field invalid
+                         Right _ -> Just t  -- Returns the text if valid
+        validate _   = Nothing
+
     amtField = editField amount AmountField (Just 1) toText validate render id
       where
         toText d = T.pack $ show d
@@ -195,7 +213,7 @@ drawUI st = [ui]
       style $
         hBox
           [ padRight (Pad 3) $ str (show $ txDate tx)
-          , hLimit 20 $ padRight Max $ txt (txTitle tx)
+          , hLimit 20 $ padRight Max $ txt (unTxTitle $ txTitle tx)
           , hLimit 12 $ padLeft Max $ str ("$" ++ show (txAmount tx))
           , padLeft (Pad 5) $ txt (let Finance.Category cat = txCategory tx in cat)
           ]
@@ -335,7 +353,7 @@ drawBudgetTable today budgetMonth maybeComparisonMap =
               , padTop (Pad 1) $ hCenter $ withAttr italicAttr $ str efficiencyStr
               ]
        in vBox [header, padBottom Max categoryRows, totalSection]
-    Nothing -> hLimit 71 $ hCenter (str "No budget found for this month.") <+> fill ' '
+    Nothing -> hLimit 75 $ hCenter (str "No budget found for this month.") <+> fill ' '
   where
     oneLine a b c d e =
       hBox
@@ -401,10 +419,14 @@ appEvent ev@(VtyEvent vtyEv) =
         Just NameField -> case vtyEv of
           Vty.EvKey Vty.KEnter [] -> do
             let currentForm = st ^. form
-            newTx <- liftIO $ createTransaction currentForm
-            let newTxs = (st ^. txs) <> [newTx]
-                txsList' = makeTxsList newTxs
-            put $ st {_form = mkForm (defaultForm (st ^. today)), _txs = newTxs, _txsList = txsList'}
+            if allFieldsValid currentForm
+              then do
+                newTx <- liftIO $ createTransaction currentForm
+                let newTxs = (st ^. txs) <> [newTx]
+                    txsList' = makeTxsList newTxs
+                put $ st {_form = mkForm (defaultForm (st ^. today)), _txs = newTxs, _txsList = txsList'}
+               else
+                continueWithoutRedraw
           _ -> zoom form $ handleFormEvent ev
         _ -> case vtyEv of
           Vty.EvKey Vty.KLeft [] -> updateBudget (-1)
@@ -453,7 +475,7 @@ createTransaction f = do
     values = formState f
     tx =
       Finance.Transaction
-        { txTitle = values ^. title
+        { txTitle = fromRight (error "Validated") $ mkTxTitle (values ^. title)
         , txDate = values ^. date
         , txAmount = values ^. amount
         , txCategory = values ^. category

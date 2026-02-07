@@ -21,7 +21,7 @@ ppTransaction tx = T.pack $ printf "%-9s | %-14s | %6.2f — %-22s"
                    (show tx.txDate)
                    (getCategoryText tx.txCategory)
                    (realToFrac tx.txAmount :: Float)
-                   tx.txTitle
+                   (unTxTitle tx.txTitle)
 
 ppAggregatedSpending :: AggregatedSpending -> T.Text
 ppAggregatedSpending ag
