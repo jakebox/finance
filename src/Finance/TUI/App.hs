@@ -3,6 +3,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
+
+
 module Finance.TUI.App (main) where
 
 import Brick
@@ -138,11 +140,11 @@ mkForm =
 
     amtField = editField amount AmountField (Just 1) id validate render id
       where
-        toText d = T.pack $ show d
-        validate [t] = case parse parseAmount "input" (T.unpack t) of
+        toText d = T.pack $ show ("$" <> d)
+        validate [t] = case parse parseAmount "input" ("$" <> T.unpack t) of
           Left _ -> Nothing
           Right _ -> Just t
-        render [t] = txt t
+        render [t] = txt ("$" <> t)
 
     dateField = editField date DateField (Just 1) toText validate render id
       where
@@ -476,7 +478,7 @@ createTransaction f = do
         { txTitle = fromRight (error "Validated") $ mkTxTitle (values ^. title)
         , txDate = values ^. date
         , txAmount =
-            fromRight (error "Validated?") $ parse parseAmount "input" (T.unpack $ (values ^. amount))
+            fromRight (error "Validated?") $ parse parseAmount "input" ("$" <> (T.unpack $ (values ^. amount)))
         , txCategory = values ^. category
         , txNote = values ^. note
         }
